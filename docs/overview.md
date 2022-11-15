@@ -6,48 +6,68 @@ There are many different types of users who need to evaluate hydrologic models a
 The envisioned hydro-evaluation system (HES) will consist of a core system that can be utilized directly or can be extended to meet specific use cases not covered by the core system.
 
 ## Use Cases
-For development design and planning two primary use cases were identified.
+For development design and planning two primary use cases were identified.  These are expected to be representative of many uses cases but will not completely cover other uses cases.  Therefore, modularity, flexibility and extendability will be key design concepts.
 
 * CIROH researcher (See @kvanwerkhoven Power Point)
     * As a CIROH researcher I want to...
+
 * ISED after action evaluation (See @kvanwerkhoven Power Point)
     * As a member of ISED I want to...
 
 ## Existing Systems
-There are several existing systems that provide some of the envision functionality.  The extent to which these systems overlap with what is envision for this project is unknown.
+There are several existing systems that provide some of the envisioned functionality.  The extent to which these systems overlap with what is envision for this project is unknown and needs to be researched.
 
-* WRES/WRDS
+* Water Resources Evaluation System (WRES)/Water Resources Data System (WRDS) - [Not 100% sure I got these names correct] An existing OWP evaluation system.  WRDS provides NWM data.  WRES allows a user to setup an evaluation and execute it.
 * ILAMB
 
 ## Vision
 A core evaluation system that can be customized and utilized to meet the needs of a wide range of users.
 
-* For a CIROH researcher wanting to compare one or more models to each other or some baseline model run, the HES could be stood-up and run in some relatively "default" mode that would, given all the correct inputs and configurations generate a standard output report that could be used to answer the question, "is the model formulation B better than model formulation A", for example.
+* For a CIROH researcher wanting to compare one or more models to each other or some baseline model run, the HES could be stood-up and run in some relatively "default" mode that would, given all the correct inputs and configurations, generate a standard output report that could be used to answer the question, "is the model formulation B better than model formulation A", for example.  As long as the system was running the user wopuld also be able to explore the datasets that went into the evaluation and "slice and dice" them to better understand them.
 
-* For ISED, the system could be stood-up and configured to automatically ingest and process some amount of data to be ready to use when and event happens and an after action evaluation is needed.
+* For ISED, the system could be stood-up and configured to automatically ingest and process some amount of data to be ready to use when an event happens and an after-action evaluation is needed.
 
-While these use cases are not the same, the premise is that from a technology perspective, there may be core components that are the same between he two use cases.  This is a good place to focus.
+While these use cases are not the same, the premise is, from a technology perspective, there may be core components that are the same between the two use cases.  This is a good place to focus, to begin with.
 
 Unlike the current WRES/WRDS systems, we anticipate the the new HES will allow for a more interactive experience.  The WRES is a single pass; define the study, execute the study, review the results, the HES will take a more interactive approach where the user defines a study, the system fetches all the relevant data and pre-processes it and loads it into a database where it can be explored and evaluated.
 
+## Concept
+Data will be stored as close to raw as practical and use the power of SQL to build materialized views and query out the required information.
+
+See DB schema.
 ## Components
-At the heart of an evaluation system is timeseries, therefore, fast efficient timeseries database will be the heart of the evaluation system.
+At the heart of the evaluation system is timeseries - therefore, a fast efficient timeseries database will be the heart of the evaluation system.  
+Other components:
+
+* Data loading library
+* Data storage system (the "heart")
+    * Timeseries
+    * Geographic data
+    * Grided data?
+    * Static datasets (gage location, HUC basins, etc.)
+    * Cross walk tables
+* Data access library
+* Analysis library
+* Web API
+* Web UI
 
 ### Data loading
 * Code library
     * Data can come from many different sources and in many different formats.
         * A central data service such as something similar to WRDS for NWM data.  This could be part of the "National Water Model in a Box" (NWMiaB).  While this will likely be a major way that data is loaded into the HES, particularly for use cases where NextGen/NWMiaB is the source, the HES mist consider data from other sources as well.
-        * Gridded forcing datasets -> MAP, MAT at HUCXX scale.
-        * NWIS for USGS gage data
-        * AHPS
-        * Flat files
-        * NetCDF files
-        * HDF5
+    * Gridded forcing datasets -> MAP, MAT at HUCXX scale.
+    * NWIS for USGS gage data
+    * AHPS forecasts
+    * Flat files (e.g., CSV file generated by a researcher)
+    * NetCDF files (current publicly available NWM data)
+    * HDF5
+    * Shapefiles
+    * Gridded data (numerous formats)
     * The evaluation system must include the necessary tools to load data into the HES from many different sources.
     * Hydrotools should be investigated as a part of this toolset development.
     * A standard timeseries protocol should be established such that data from any source format can be put into a standard format that can then be loaded into the HES DB.  This may be developed in conjunction/collaboration with the the "Water Model in a Box" team.
 * Configurations (study definitions, recipes, etc.)
-* Automated, scheduled or on demand as required per use case
+* Library should support automated, scheduled or on demand runs as required per use case.
 
 As with other parts of the system, there are various use cases that will require different ways of loading data into the system.  For example, for the ISED use case the use case may require that certain data is continuously loaded in to the HES such that is is essentially always ready to conduct an evaluation.  In this case the data loading process needs to be executed as part of a scheduled job along with any pre-processing steps such as building materialized views.
 
@@ -59,7 +79,7 @@ Some data could be loaded as part of a "new instance initialization"  This could
 * Timeseries (focus here)
 * Tags
 * Geographic data (raster and vector)
-* Thresholds
+* Tags (Thresholds
 * Study configuration/definition
 * Static data (USGS gage locations, NHD catchments, etc.)
 * Hydrofabric data?
