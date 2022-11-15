@@ -28,24 +28,36 @@ A core evaluation system that can be customized and utilized to meet the needs o
 
 While these use cases are not the same, the premise is that from a technology perspective, there may be core components that are the same between he two use cases.  This is a good place to focus.
 
+Unlike the current WRES/WRDS systems, we anticipate the the new HES will allow for a more interactive experience.  The WRES is a single pass; define the study, execute the study, review the results, the HES will take a more interactive approach where the user defines a study, the system fetches all the relevant data and pre-processes it and loads it into a database where it can be explored and evaluated.
+
 ## Components
-At the heart of an evaluation system is timeseries.  A fast efficient timeseries database will be the heart of the evaluation system.
+At the heart of an evaluation system is timeseries, therefore, fast efficient timeseries database will be the heart of the evaluation system.
 
 ### Data loading
 * Code library
     * Data can come from many different sources and in many different formats.
-        * A central data service such as something similar to WRDS for NWM data
+        * A central data service such as something similar to WRDS for NWM data.  This could be part of the "National Water Model in a Box" (NWMiaB).  While this will likely be a major way that data is loaded into the HES, particularly for use cases where NextGen/NWMiaB is the source, the HES mist consider data from other sources as well.
+        * Gridded forcing datasets -> MAP, MAT at HUCXX scale.
         * NWIS for USGS gage data
         * AHPS
         * Flat files
         * NetCDF files
         * HDF5
-    * The evaluation system must include the necessary tools to load data into the HES.
+    * The evaluation system must include the necessary tools to load data into the HES from many different sources.
+    * Hydrotools should be investigated as a part of this toolset development.
+    * A standard timeseries protocol should be established such that data from any source format can be put into a standard format that can then be loaded into the HES DB.  This may be developed in conjunction/collaboration with the the "Water Model in a Box" team.
 * Configurations (study definitions, recipes, etc.)
 * Automated, scheduled or on demand as required per use case
 
-### Data storage
+As with other parts of the system, there are various use cases that will require different ways of loading data into the system.  For example, for the ISED use case the use case may require that certain data is continuously loaded in to the HES such that is is essentially always ready to conduct an evaluation.  In this case the data loading process needs to be executed as part of a scheduled job along with any pre-processing steps such as building materialized views.
+
+In contrast, the research user may be load data from a fixed set of model runs that are part of a study to answer a particular question (e.g., does model formulation A perform better than the baseline formulation in region X).  In this case the user would likely want to load the data and pre-process it once, then generate a standard evaluation report and then explore the data to understand the results.
+
+Some data could be loaded as part of a "new instance initialization"  This could include static geographic data such as HUC boundaries, USGS gage locations, etc.  Could also include cross-walk tables to relate various datasets, such as geographic locations, parameters, etc.
+
+### Data storage (cache DB)
 * Timeseries (focus here)
+* Tags
 * Geographic data (raster and vector)
 * Thresholds
 * Study configuration/definition
@@ -58,6 +70,12 @@ To steal the WRDS terminology:
 * Pool
 * Statistics
 
+### Standard Evaluation
+The system should include a standard evaluation that can be executed against 1 or more model formulations to compare the one formulation against another in a systematic way to answer the question, "which model is better".
+
+### Explore
+In addition to a standard evaluation, the HES should also include robust facilities to explore model inputs and outputs.  This more closely aligns with the ISED evaluation that the standard evaluation, however a researcher running the standard evaluation may also wish to explore that data to understand the performance.
+
 ### Access
 Multiple levels of access ranging from raw SQL to a Python library (e.g., with Pandas) to a web service.
 * SQL
@@ -67,3 +85,13 @@ Multiple levels of access ranging from raw SQL to a Python library (e.g., with P
 
 ## Infrastructure
 100% containerized
+
+All infrastructure should be developed as Infrastructure as Code (IaC) such that a new user can stand up a new instance in the cloud with relative ease.  This should include the ability to stand up next to NWMiaB.
+
+In addition, it should be possible to stand up a complete running instance on a personal computer (obviously with limited computer capacity), for testing and running small jobs.  This could be orchestrated with docker-compose, for example.
+
+Individual services should be containerized where possible.
+
+Libraries and APIs will primarily be written in Python and take advantage of existing data libraries where we can, such as Pandas, Numpy, XArray, FastAPI, Pydantic, SQAlchemy, Django 
+
+Database
