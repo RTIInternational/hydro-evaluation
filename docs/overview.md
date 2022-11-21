@@ -23,7 +23,7 @@ There are several existing systems that provide some of the envisioned functiona
 ## Vision
 A core evaluation system that can be customized and utilized to meet the needs of a wide range of users.
 
-* For a CIROH researcher wanting to compare one or more models to each other or some baseline model run, the HES could be stood-up and run in some relatively "default" mode that would, given all the correct inputs and configurations, generate a standard output report that could be used to answer the question, "is the model formulation B better than model formulation A", for example.  As long as the system was running the user wopuld also be able to explore the datasets that went into the evaluation and "slice and dice" them to better understand them.
+* For a CIROH researcher wanting to compare one or more models to each other or some baseline model run, the HES could be stood-up and run in some relatively "default" mode that would, given all the correct inputs and configurations, generate a standard output report that could be used to answer the question, "is the model formulation B better than model formulation A", for example.  As long as the system was running the user would also be able to explore the datasets that went into the evaluation and "slice and dice" them to better understand them.
 
 * For ISED, the system could be stood-up and configured to automatically ingest and process some amount of data to be ready to use when an event happens and an after-action evaluation is needed.
 
