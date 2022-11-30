@@ -13,6 +13,7 @@ sqlalchemy = "*"
 autopep8 = "*"
 sqlalchemy-utils = "*"
 psycopg2 = "*"
+prefect = "*"
 
 [dev-packages]
 
