@@ -75,7 +75,7 @@ class Values(Base):
         return f"Values(id={self.id!r}, datetime={self.datetime!r}, value={self.value!r})"
 
 
-class StringTagType(Base):
+class StringTagTypes(Base):
     __tablename__ = "string_tag_types"
 
     name = Column(
@@ -115,7 +115,7 @@ class StringTags(Base):
     value = Column(String, nullable=False)
 
     string_tag_types = relationship(
-        "StringTagType",
+        "StringTagTypes",
         back_populates="string_tags"
     )
 
@@ -123,7 +123,7 @@ class StringTags(Base):
         return f"StringTags(id={self.id!r}, string_tag_type={self.string_tag_type!r}, value={self.value!r})"
 
 
-class DateTimeTagType(Base):
+class DateTimeTagTypes(Base):
     __tablename__ = "datetime_tag_types"
 
     name = Column(
@@ -163,7 +163,7 @@ class DateTimeTags(Base):
     value = Column(DateTime, nullable=False)
 
     datetime_tag_types = relationship(
-        "DateTimeTagType",
+        "DateTimeTagTypes",
         back_populates="datetime_tags"
     )
 
