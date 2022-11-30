@@ -13,8 +13,6 @@ from sqlalchemy.orm import Session
 from models import StringTagTypes, DateTimeTagTypes, StringTags, DateTimeTags, Timeseries
 
 
-
-
 engine = create_engine(
     config.CONNECTION,
     # echo=True,
@@ -36,7 +34,7 @@ def fetch_nwm():
     #  CONUS that are used for model assimilation
     forecast_data = model_data_service.get(
         configuration = "medium_range_mem1",
-        reference_time = "20221104T00Z"
+        reference_time = "20221105T00Z"
         )
 
     # Look at the data
@@ -81,6 +79,7 @@ def df_to_evaldb(
             group['timeseries_id'] = ts.id
             group.rename(columns={"value_time":"datetime"}, inplace=True)
             group = group[["datetime", "value", "timeseries_id"]]
+            group.set_index("datetime", inplace=True)
             group.to_sql("values", engine, if_exists="append")
         elapsed = time.perf_counter() - start
         print(f'Time {elapsed:0.4}')
