@@ -36,7 +36,7 @@ class Timeseries(Base):
 
     id = Column(UUIDType, primary_key=True, server_default=text(
         "gen_random_uuid()"), default=uuid.uuid4)
-    name = Column(String(30), nullable=False)
+    name = Column(String, nullable=False)
 
     values = relationship(
         "Values",

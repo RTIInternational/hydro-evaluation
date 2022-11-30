@@ -15,7 +15,11 @@ from models import StringTagTypes, DateTimeTagTypes, StringTags, DateTimeTags, T
 
 
 
-engine = create_engine(config.CONNECTION, echo=True, future=True)
+engine = create_engine(
+    config.CONNECTION,
+    # echo=True,
+    future=True
+)
 
 
 def fetch_nwm():
@@ -63,27 +67,23 @@ def df_to_evaldb(
 ):
     """Write pd.DataFrame to eval database."""
 
-    # start = time.perf_counter()
-    # time.sleep(1) # do work
-    # elapsed = time.perf_counter() - start
-    # print(f'Time {elapsed:0.4}')
-
-    df = df[df['nwm_feature_id'] == 1180000535]
+    # df = df[df['nwm_feature_id'] == 1180000535]
 
     df_tags = create_df_tags(df, tag_cols)
 
     groups = df.groupby(unq_cols)
-    print(len(groups))
 
     for name, group in groups:
-        print(name)
-        print(group)
+        start = time.perf_counter()
         ts_tags = create_ts_tags(unq_cols, name)
         with Session(engine) as session:
-            ts = Timeseries(name="_".join([str(v) for v in name]))
-            session.add(ts)
-            session.commit()
-
+            ts, cr = utils.get_or_create(session, Timeseries, name="_".join([str(v) for v in name]))
+            group['timeseries_id'] = ts.id
+            group.rename(columns={"value_time":"datetime"}, inplace=True)
+            group = group[["datetime", "value", "timeseries_id"]]
+            group.to_sql("values", engine, if_exists="append")
+        elapsed = time.perf_counter() - start
+        print(f'Time {elapsed:0.4}')
 
 # def get_tag_types(tag_names: List[str]):
 #     with Session(engine) as session:
@@ -219,6 +219,6 @@ if __name__ == "__main__":
     # fetch_usgs()
     df_to_evaldb(
         forecast_data,
-        unq_cols=["nwm_feature_id", "variable_name"],
-        tag_cols=["reference_time", "configuration", "measurement_unit", "variable_name"]
+        unq_cols=["reference_time", "nwm_feature_id", "variable_name"],
+        tag_cols=["configuration", "measurement_unit"]
     )
