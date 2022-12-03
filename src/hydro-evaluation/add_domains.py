@@ -4,7 +4,11 @@ from models import StringTagTypes, DateTimeTagTypes
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-engine = create_engine(config.CONNECTION, echo=True, future=True)
+engine = create_engine(
+    config.CONNECTION,
+    echo=True,
+    future=True
+)
 
 with Session(engine) as session:
     print(f"Loading string tags")

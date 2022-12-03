@@ -20,15 +20,15 @@ Base = declarative_base()
 timeseries_string_tag = Table(
     "timeseries_string_tag",
     Base.metadata,
-    Column("timeseries", ForeignKey("timeseries.id")),
-    Column("string_tags", ForeignKey("string_tags.id")),
+    Column("timeseries_id", ForeignKey("timeseries.id")),
+    Column("string_tag_id", ForeignKey("string_tags.id")),
 )
 
 timeseries_datetime_tag = Table(
-    "datetime_string_tag",
+    "timeseries_datetime_tag",
     Base.metadata,
-    Column("timeseries", ForeignKey("timeseries.id")),
-    Column("datetime_tags", ForeignKey("datetime_tags.id")),
+    Column("timeseries_id", ForeignKey("timeseries.id")),
+    Column("datetime_tag_id", ForeignKey("datetime_tags.id")),
 )
 
 class Timeseries(Base):
