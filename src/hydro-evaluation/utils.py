@@ -1,9 +1,11 @@
 import io
+from io import StringIO
+from typing import List
+
 import pandas as pd
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session
-from sqlalchemy.ext import declarative_base
-from io import StringIO
+from sqlalchemy.orm import Session, declarative_base
+
 
 def get_or_create(session, model, defaults=None, **kwargs):
     instance = session.query(model).filter_by(**kwargs).one_or_none()
@@ -86,7 +88,7 @@ def upsert_bulk(session: Session, model: BaseModel, data: io.StringIO) -> None:
     conn.close()
 
 
-def insert_bulk(session: Session, df: pd.DataFrame, table_name: str, columns: List[str]):
+def insert_bulk(session: Session, df: pd.DataFrame, table_name: str, columns: List[str], returning: List[str] = ["id"]):
     """
     Here we are going save the dataframe in memory 
     and use copy_from() to copy it to the table
@@ -104,7 +106,7 @@ def insert_bulk(session: Session, df: pd.DataFrame, table_name: str, columns: Li
         # the final table
         cursor.execute(
             f"""
-            CREATE TEMPORARY TABLE {temp_table_name} (LIKE {table_name})
+            CREATE TEMPORARY TABLE {temp_table_name} (LIKE {table_name} INCLUDING DEFAULTS)
             ON COMMIT DROP
             """
         )
@@ -114,12 +116,22 @@ def insert_bulk(session: Session, df: pd.DataFrame, table_name: str, columns: Li
 
         # Inserts copied data from the temporary table to the final table
         # updating existing values at each new conflict
-        ret = cursor.execute(
-            f"""
-            INSERT INTO {table_name}({', '.join(columns)})
-            SELECT * FROM {temp_table_name} RETURNING (id)
-            """
-        )
+        if len(returning) > 0:
+            cursor.execute(
+                f"""
+                INSERT INTO {table_name}({', '.join(columns)})
+                SELECT {', '.join(columns)} FROM {temp_table_name} ON CONFLICT DO NOTHING RETURNING {', '.join(returning)};
+                """
+            )
+            records = cursor.fetchall()
+        else:
+            cursor.execute(
+                f"""
+                INSERT INTO {table_name}({', '.join(columns)})
+                SELECT {', '.join(columns)} FROM {temp_table_name} ON CONFLICT DO NOTHING;
+                """
+            )
+            records = None
 
         # Drops temporary table (I believe this step is unnecessary,
         # but tables sizes where growing without any new data modifications
@@ -131,4 +143,4 @@ def insert_bulk(session: Session, df: pd.DataFrame, table_name: str, columns: Li
 
     conn.close()
 
-    return ret
+    return records
