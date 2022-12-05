@@ -1,11 +1,11 @@
 import io
+from typing import List
+
 import pandas as pd
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session
-from sqlalchemy.ext import declarative_base
+from sqlalchemy.orm import Session, declarative_base
 
 BaseModel = declarative_base()
-
 
 def upsert_bulk(session: Session, model: BaseModel, data: io.StringIO) -> None:
     """
