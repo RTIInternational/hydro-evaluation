@@ -85,7 +85,7 @@ def fetch_nwm():
     #  CONUS that are used for model assimilation
     forecast_data = model_data_service.get(
         configuration="medium_range_mem1",
-        reference_time="20221106T00Z"
+        reference_time="20221108T00Z"
     )
 
     # Look at the data
@@ -349,7 +349,7 @@ def df_to_evaldb(
         ts_string_tags = [*string_tags, *define_ts_tags("string_tag", unq_cols, name)]
         ts_string_tags_df = pd.DataFrame(ts_string_tags)
         with Session(engine) as session:
-            ts_string_tag_ids = utils.insert_bulk(
+            ts_string_tag_ids = utils.insert_multi(
                 session,
                 ts_string_tags_df[["tag_type_name", "value"]],
                 "string_tags",
@@ -366,7 +366,7 @@ def df_to_evaldb(
         ts_datetime_tags = [*datetime_tags, *define_ts_tags("datetime_tag", unq_cols, name)]
         ts_datetime_tags_df = pd.DataFrame(ts_datetime_tags)
         with Session(engine) as session:
-            ts_datetime_tag_ids = utils.insert_bulk(
+            ts_datetime_tag_ids = utils.insert_multi(
                 session,
                 ts_datetime_tags_df[["tag_type_name", "value"]],
                 "datetime_tags",
