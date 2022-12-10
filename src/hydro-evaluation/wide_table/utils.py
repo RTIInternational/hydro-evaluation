@@ -76,7 +76,7 @@ def insert_bulk(df: pd.DataFrame, table_name: str, columns: List[str]):
                 conn.commit()
             except (Exception, psycopg2.Error) as error:
                 print(error)
-            cursor.close()
+    conn.close()
 
 
 def get_xwalk() -> pd.DataFrame:
