@@ -1,3 +1,15 @@
 {
-    "python.analysis.typeCheckingMode": "off"
+    "python.analysis.typeCheckingMode": "off",
+    "python.envFile": "${workspaceFolder}/.env",
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    "terminal.integrated.env.linux": {
+        "PYTHONPATH": ":${workspaceFolder}/normalized_tags:${workspaceFolder}"
+    },
+    "python.formatting.autopep8Path": "${workspaceFolder}/.venv/bin/autopep8",
+    "python.formatting.blackPath": "${workspaceFolder}/.venv/bin/black",
+    "python.formatting.autopep8Args": ["--ignore","E402"],
+    "cSpell.diagnosticLevel": "Hint",
+    "cSpell.words": [
+        "streamflow"
+    ],
 }

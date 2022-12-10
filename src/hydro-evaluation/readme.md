@@ -1,4 +1,4 @@
-Getting Started
+Getting Started (normalized_tags)
 
 ```bash
 cd src/hydro-eval
@@ -15,3 +15,8 @@ alembic upgrade head
 python add_domains.py
 ```
 
+```bash
+python load/test_hydrotools.py
+```
+
+Getting started (wide_table)
