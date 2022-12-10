@@ -2,10 +2,8 @@
 import csv
 import os
 import time
-from concurrent.futures import ProcessPoolExecutor
 from functools import wraps
 from io import StringIO
-from itertools import repeat
 from typing import Any, List
 
 import numpy as np
@@ -18,10 +16,11 @@ from hydrotools.nwm_client import gcp as nwm
 from sqlalchemy import create_engine, insert, select
 from sqlalchemy.orm import Session
 
-import config
-import utils
+import normalized_tags.config as config
+import normalized_tags.utils as utils
 from models import (DateTimeTags, DateTimeTagTypes, StringTags, StringTagTypes,
                     Timeseries)
+
 
 engine = create_engine(
     config.CONNECTION,
@@ -66,7 +65,7 @@ def fetch_nwm():
     #  CONUS that are used for model assimilation
     forecast_data = model_data_service.get(
         configuration="medium_range_mem1",
-        reference_time="20221109T00Z"
+        reference_time="20221111T00Z"
     )
 
     # Look at the data
@@ -108,57 +107,6 @@ def create_tag_df(ts_id: str, tags: List[dict], tag_type: str):
             "datetime_tag_id": tag_ids
         })
 
-def process_group(session, ts_id, name_group, string_tags, datetime_tags, unq_cols):
-    name, group = name_group
-    ts_string_tags = [*string_tags, *define_ts_tags("string_tag", unq_cols, name)]
-    ts_string_tags_df = pd.DataFrame(ts_string_tags)
-    # print(ts_id)
-    ts_datetime_tags = [*datetime_tags, *define_ts_tags("datetime_tag", unq_cols, name)]
-    ts_datetime_tags_df = pd.DataFrame(ts_datetime_tags)
-
-    # with Session(engine) as session:
-    ts_string_tag_ids = utils.insert_multi(
-        session,
-        ts_string_tags_df[["tag_type_name", "value"]],
-        "string_tags",
-        columns=["string_tag_type_name", "value"],
-    )
-    ts_string_tag_ids = [str(r[0]) for r in ts_string_tag_ids]
-
-    timeseries_string_tag_df = pd.DataFrame({
-        "timeseries_id": ts_id, 
-        "string_tag_id": ts_string_tag_ids
-    })
-    utils.insert_multi(
-        session,
-        timeseries_string_tag_df[["timeseries_id","string_tag_id"]],
-        "timeseries_string_tag",
-        columns=["timeseries_id","string_tag_id"],
-    )
-    ts_datetime_tag_ids = utils.insert_multi(
-        session,
-        ts_datetime_tags_df[["tag_type_name", "value"]],
-        "datetime_tags",
-        columns=["datetime_tag_type_name", "value"],
-    )
-    ts_datetime_tag_ids = [str(r[0]) for r in ts_datetime_tag_ids]
-    timeseries_datetime_tag_df = pd.DataFrame({
-        "timeseries_id": ts_id, 
-        "datetime_tag_id": ts_datetime_tag_ids
-    })
-    utils.insert_multi(
-        session,
-        timeseries_datetime_tag_df[["timeseries_id","datetime_tag_id"]],
-        "timeseries_datetime_tag",
-        columns=["timeseries_id","datetime_tag_id"],
-    )
-
-    group['timeseries_id'] = ts_id
-    group.rename(columns={"value_time": "datetime"}, inplace=True)
-    group = group[["datetime", "value", "timeseries_id"]]
-
-    return group
-
 
 @profile
 def df_to_evaldb(
@@ -188,7 +136,11 @@ def df_to_evaldb(
 
     """
 
+    df_tags = create_df_tags(df, tag_cols)
+
     updated_groups = []
+    timeseries_string_tag_df = []
+    timeseries_datetime_tag_df = []
     group_names = []
 
     string_tags = define_df_tags(df, "string_tag", tag_cols)
@@ -217,34 +169,82 @@ def df_to_evaldb(
 
     #print(f"Create timeseries and timeseries tags")
     t = time.perf_counter()
+    for i, name_group in enumerate(groups):
+        name, group = name_group
+        ts_string_tags = [*string_tags, *define_ts_tags("string_tag", unq_cols, name)]
+        ts_string_tags_df = pd.DataFrame(ts_string_tags)
+        with Session(engine) as session:
+            ts_string_tag_ids = utils.insert_multi(
+                session,
+                ts_string_tags_df[["tag_type_name", "value"]],
+                "string_tags",
+                columns=["string_tag_type_name", "value"],
+            )
+            ts_string_tag_ids = [str(r[0]) for r in ts_string_tag_ids]
+        timeseries_string_tag_df.append(
+            pd.DataFrame({
+                "timeseries_id": ts_ids[i], 
+                "string_tag_id": ts_string_tag_ids
+            })
+        )
 
-    max_processes = max((os.cpu_count() - 2), 1)
+        ts_datetime_tags = [*datetime_tags, *define_ts_tags("datetime_tag", unq_cols, name)]
+        ts_datetime_tags_df = pd.DataFrame(ts_datetime_tags)
+        with Session(engine) as session:
+            ts_datetime_tag_ids = utils.insert_multi(
+                session,
+                ts_datetime_tags_df[["tag_type_name", "value"]],
+                "datetime_tags",
+                columns=["datetime_tag_type_name", "value"],
+            )
+            ts_datetime_tag_ids = [str(r[0]) for r in ts_datetime_tag_ids]
+        timeseries_datetime_tag_df.append(
+            pd.DataFrame({
+                "timeseries_id": ts_ids[i], 
+                "datetime_tag_id": ts_datetime_tag_ids
+            })
+        )
 
-     # Compute chunksize
-    len_grps = len(groups)
-    chunksize = (len_grps // max_processes) + 1
+        group['timeseries_id'] = ts_ids[i]
+        group.rename(columns={"value_time": "datetime"}, inplace=True)
+        group = group[["datetime", "value", "timeseries_id"]]
+        updated_groups.append(group)
 
-    # Retrieve data
-    with Session(engine) as session:
-        with ProcessPoolExecutor(max_workers=max_processes) as executor:
-            updated_groups = executor.map(
-                process_group, 
-                repeat(session, len_grps),
-                ts_ids,
-                groups,
-                repeat(string_tags, len_grps),
-                repeat(datetime_tags, len_grps),
-                repeat(unq_cols, len_grps),
-                # chunksize=chunksize
-                )
-   
+
     elapsed = time.perf_counter() - t
     print(f"Create and timeseries tags: {elapsed}")
+
+    #print(f"Merge and insert string tags")
+    t = time.perf_counter()
+    merged_string_tags_df = pd.concat(timeseries_string_tag_df)
+    with Session(engine) as session:
+        utils.insert_bulk(
+            session,
+            merged_string_tags_df[["timeseries_id", "string_tag_id"]],
+            "timeseries_string_tag",
+            columns=["timeseries_id", "string_tag_id"],
+            returning=[]
+        )
+    elapsed = time.perf_counter() - t
+    print(f"Merge and insert string tags: {elapsed}")
+
+    # print(f"Merge and insert datetime tags")
+    t = time.perf_counter()
+    merged_datetime_tags_df = pd.concat(timeseries_datetime_tag_df)
+    with Session(engine) as session:
+        utils.insert_bulk(
+            session,
+            merged_datetime_tags_df[["timeseries_id", "datetime_tag_id"]],
+            "timeseries_datetime_tag",
+            columns=["timeseries_id", "datetime_tag_id"],
+            returning=[]
+        )
+    elapsed = time.perf_counter() - t
+    print(f"Merge and insert datetime tags: {elapsed}")
 
     # print(f"Merge and insert values")
     t = time.perf_counter()
     updated_df = pd.concat(updated_groups)
-
     with Session(engine) as session:
         utils.insert_bulk(
             session,
