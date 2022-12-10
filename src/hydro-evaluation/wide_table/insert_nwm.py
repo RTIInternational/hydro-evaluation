@@ -23,7 +23,7 @@ def fetch_nwm(reference_time: str) -> pd.DataFrame:
     )
 
     # Look at the data
-    print(forecast_data.info(memory_usage='deep'))
+    # print(forecast_data.info(memory_usage='deep'))
     # print(forecast_data)
     return forecast_data
 
@@ -47,17 +47,17 @@ def insert_nwm(df: pd.DataFrame):
 
 
 def ingest_nwm():
-    start_dt = datetime(2022, 10, 1)
+    start_dt = datetime(2022, 10, 1) # Starts at 20221001T00Z
     td = timedelta(hours=6)
-    number_of_forecasts = 20 * 4
+    number_of_forecasts = 17 * 4
 
     for f in range(number_of_forecasts):
         reference_time = start_dt + td * f
         ref_time_str = reference_time.strftime("%Y%m%dT%HZ")
-        print(ref_time_str)
-
+        print(f"Fetching NWM: {ref_time_str}")
         forecast_data = fetch_nwm(reference_time=ref_time_str)
-        insert_nwm(forecast_data)
+        print(f"Fetched: {len(forecast_data)} rows")
+        # insert_nwm(forecast_data)
 
 
 if __name__ == "__main__":
