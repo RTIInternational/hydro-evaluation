@@ -20,9 +20,11 @@ def upgrade() -> None:
     op.execute("""
         CREATE EXTENSION postgis;
     """)
+    # pass
 
 
 def downgrade() -> None:
     op.execute("""
         DROP EXTENSION postgis;
     """)
+    # pass

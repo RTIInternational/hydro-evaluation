@@ -20,20 +20,16 @@ def upgrade() -> None:
     op.execute("""
         SELECT create_hypertable(
             'nwm_data',
-            'value_time',
-            'nwm_feature_id',
-            4
+            'value_time'
         );
     """)
     op.execute("""
         SELECT create_hypertable(
             'usgs_data',
-            'value_time',
-            'usgs_site_code',
-            4
+            'value_time'
         );
     """)
-
+    pass
 
 def downgrade() -> None:
     pass
