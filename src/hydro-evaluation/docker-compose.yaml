@@ -2,6 +2,7 @@ version: '3.6'
 services:
   postgres:
     image: timescale/timescaledb-ha:pg14-latest
+    # image: postgis/postgis:14-3.3
     restart: always
     volumes:
     - db_data:/home/postgres/pgdata/data
@@ -9,6 +10,11 @@ services:
       POSTGRES_PASSWORD: postgrespassword
     ports:
     - 5432:5432
+    shm_size: 2gb
+    command:
+    - "postgres"
+    - "-c"
+    - "max_wal_size=4GB"
   # graphql-engine:
   #   image: hasura/graphql-engine:v2.6.2
   #   ports:

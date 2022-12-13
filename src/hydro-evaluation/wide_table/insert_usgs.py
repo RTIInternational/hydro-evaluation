@@ -1,14 +1,16 @@
 from wide_table.utils import profile, insert_bulk
 import wide_table.utils as utils
-from hydrotools.nwm_client import gcp as nwm
 from hydrotools.nwis_client.iv import IVDataService
 from datetime import datetime, timedelta
 
+
 @profile
 def fetch_usgs(start_dt: str, end_dt: str):
+    # get cross walk table from *.csv
     xwalk_data = utils.get_xwalk()
+
+    # filter out gage_ids that have letters in them as not USGS
     xwalk_data = xwalk_data[~xwalk_data['usgs_site_code'].str.contains("[a-zA-Z]").fillna(False)]
-    # print(xwalk_data)
 
     # Retrieve data from a single site
     service = IVDataService(
@@ -21,22 +23,27 @@ def fetch_usgs(start_dt: str, end_dt: str):
     )
 
     # Look at the data
-    print(observations_data.info(memory_usage='deep'))
-    print(observations_data)
+    # print(observations_data.info(memory_usage='deep'))
+    # print(observations_data)
+
+    # Return the data
     return observations_data
+
 
 @profile
 def insert_usgs(df):
+    # Specify which columns to insert in database 
     columns = [
         "value_time",
         "variable_name",
         "usgs_site_code",
         "measurement_unit",
-        "value",
-        # "qualifiers",
-        # "series"    
+        "value", 
     ]
+
+    #Insert the data in the database
     insert_bulk(df[columns], "usgs_data", columns=columns)
+
 
 def ingest_usgs():
     start = datetime(2022, 10, 1)
@@ -68,6 +75,7 @@ def ingest_usgs():
 
         # Insert to database
         insert_usgs(obs)
+
 
 if __name__ == "__main__":
     ingest_usgs()
