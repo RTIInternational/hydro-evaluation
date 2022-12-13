@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 import psycopg2
 import psycopg2.extras
-import config
+import wide_table.config as config
 
 def profile(fn):
     @wraps(fn)

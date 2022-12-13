@@ -36,8 +36,7 @@ def upgrade() -> None:
         );
     """)
     op.execute("""
-        ALTER TABLE usgs_data
-        ADD CONSTRAINT unique_usgs_data UNIQUE (
+        CREATE UNIQUE INDEX idx_unique_usgs_data ON usgs_data (
             value_time,
             variable_name,
             usgs_site_code,

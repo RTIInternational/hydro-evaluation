@@ -1,1 +1,1 @@
-CONNECTION = "postgres://postgres:postgrespassword@localhost:5432/postgres"
+CONNECTION = "postgresql://postgres:postgrespassword@localhost:5432/postgres"
