@@ -39,8 +39,7 @@ def upgrade() -> None:
         );
     """)
     op.execute("""
-        ALTER TABLE nwm_data
-        ADD CONSTRAINT unique_nwm_data UNIQUE (
+        CREATE UNIQUE INDEX idx_unique_nwm_data ON nwm_data (
             reference_time,
             value_time,
             nwm_feature_id,    
