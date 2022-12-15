@@ -1,11 +1,13 @@
 
-from wide_table.utils import profile, insert_bulk
-from hydrotools.nwm_client import gcp as nwm
 from datetime import datetime, timedelta
-import pandas as pd
+
+from hydrotools.nwm_client import gcp as nwm
+import normalized_tags.utils as utils
+from normalized_tags.utils import profile
+
 
 @profile
-def fetch_nwm(reference_time: str) -> pd.DataFrame:
+def fetch_nwm(reference_time: str,  convert_to_us: bool = True):
     # Instantiate model data service
     #  By default, NWM values are in SI units
     model_data_service = nwm.NWMDataService()
@@ -17,41 +19,22 @@ def fetch_nwm(reference_time: str) -> pd.DataFrame:
         configuration="medium_range_mem1",
         reference_time=reference_time
     )
+    # convert to US units
+    if convert_to_us:
+        forecast_data["value"] = forecast_data["value"]/(0.3048**3)
+        forecast_data["measurement_unit"] = "ft3/s"
 
     # Look at the data
-    # print(forecast_data.info(verbose=True, memory_usage='deep'))
-    # print(forecast_data.memory_usage(index=True, deep=True))
-
-    # Return the data
+    # print(forecast_data.info(memory_usage='deep'))
+    # print(forecast_data)
     return forecast_data
-
-
-@profile
-def insert_nwm(df: pd.DataFrame):
-    # convert to US units
-    df["value"] = df["value"]/(0.3048**3)
-    df["measurement_unit"] = "ft3/s"
-
-    # Define columns to insert
-    columns = [
-        "reference_time",
-        "value_time",
-        "nwm_feature_id",       
-        "value",
-        "configuration",
-        "measurement_unit",
-        "variable_name"
-    ]
-
-    # Insert the data
-    insert_bulk(df[columns], "nwm_data", columns=columns)
 
 
 def ingest_nwm():
     
     # Setup some criteria
     ingest_days = 20
-    start_dt = datetime(2022, 10, 1) # First one is at 00Z in date
+    start_dt = datetime(2022, 10, 20) # First one is at 00Z in date
     td = timedelta(hours=6)
     number_of_forecasts = ingest_days * 4
 
@@ -62,7 +45,12 @@ def ingest_nwm():
         print(f"Fetching NWM: {ref_time_str}")
         forecast_data = fetch_nwm(reference_time=ref_time_str)
         print(f"Fetched: {len(forecast_data)} rows")
-        insert_nwm(forecast_data)
+        utils.insert_df(
+            forecast_data,
+            unq_cols=["reference_time", "nwm_feature_id"],
+            unique_name_cols = ["reference_time", "nwm_feature_id"],
+            tag_cols = ["configuration", "measurement_unit", "variable_name"],
+        )
 
 
 if __name__ == "__main__":

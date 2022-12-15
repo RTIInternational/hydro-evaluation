@@ -329,7 +329,6 @@ def create_ts_tags(tag_type_names: List[str], tag_values: List[Any]) -> List:
 
     ToDo: this pattern might not be too good, will work for now.
 
-
         Parameters
         ----------
             df: 

@@ -1,22 +1,2 @@
-Getting Started (normalized_tags)
-
-```bash
-cd src/hydro-eval
-pipenv install
-pipenv shell
-```
-
-```bash
-docker compose up -d
-alembic upgrade head
-```
-
-```bash
-python add_domains.py
-```
-
-```bash
-python load/test_hydrotools.py
-```
-
-Getting started (wide_table)
+This repo contains test code for evaluation different approaches for building an
+Evaluation System for the Nationalk Water Model data.
