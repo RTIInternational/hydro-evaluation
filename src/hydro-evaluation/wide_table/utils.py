@@ -1,4 +1,3 @@
-import io
 import time
 from io import StringIO
 from typing import List
@@ -6,10 +5,10 @@ from functools import wraps
 from pathlib import Path
 
 import pandas as pd
-import numpy as np
 import psycopg2
 import psycopg2.extras
 import wide_table.config as config
+
 
 def profile(fn):
     @wraps(fn)
@@ -31,6 +30,7 @@ def profile(fn):
 
     return inner
 
+
 def insert_bulk(df: pd.DataFrame, table_name: str, columns: List[str]):
     """Here we are going save the dataframe in memory and use copy_from() to copy it to the table
     """
@@ -39,7 +39,7 @@ def insert_bulk(df: pd.DataFrame, table_name: str, columns: List[str]):
     df.to_csv(buffer, header=False, index=False)
     buffer.seek(0)
 
-    temp_table_name = f"temp_{table_name}"    
+    temp_table_name = f"temp_{table_name}"
 
     conn = psycopg2.connect(config.CONNECTION)
 
@@ -56,7 +56,8 @@ def insert_bulk(df: pd.DataFrame, table_name: str, columns: List[str]):
                 )
 
                 # Copy stream data to the created temporary table in DB
-                cursor.copy_from(buffer, temp_table_name, sep=",", columns=columns)
+                cursor.copy_from(buffer, temp_table_name,
+                                 sep=",", columns=columns)
 
                 # Inserts copied data from the temporary table to the final table
                 # updating existing values at each new conflict
@@ -80,7 +81,8 @@ def insert_bulk(df: pd.DataFrame, table_name: str, columns: List[str]):
 
 
 def get_xwalk() -> pd.DataFrame:
-    file = Path(__file__).resolve().parent.parent / "data/RouteLink_CONUS_NWMv2.1.6.csv",
+    file = Path(__file__).resolve().parent.parent / \
+        "data/RouteLink_CONUS_NWMv2.1.6.csv",
 
     df = pd.read_csv(
         file[0],
@@ -89,9 +91,9 @@ def get_xwalk() -> pd.DataFrame:
             "usgs_site_code": str,
             "latitude": float,
             "longitude": float
-            },
+        },
         comment='#'
-    )[["nwm_feature_id","usgs_site_code","latitude","longitude"]]
+    )[["nwm_feature_id", "usgs_site_code", "latitude", "longitude"]]
 
     # print(df.info(memory_usage='deep'))
     # print(df.head)

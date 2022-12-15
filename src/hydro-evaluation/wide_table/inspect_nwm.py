@@ -24,6 +24,7 @@ def fetch_nwm():
     # Look at the DataFrame info and memory usage
     print(forecast_data.info(verbose=True, memory_usage='deep'))
     print(forecast_data.memory_usage(index=True, deep=True))
+    print(forecast_data)
 
     # Invetigate what the DataFrame looks like when `category` 
     #   columns are swapped for `object` columns.
