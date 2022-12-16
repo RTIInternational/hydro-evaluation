@@ -12,6 +12,7 @@ import psycopg2.extras
 import wide_table.config as config
 import wide_table.queries as queries
 from wide_table.utils import profile
+import matplotlib.pyplot as plt
 
 @profile
 def get_metrics():
@@ -19,13 +20,13 @@ def get_metrics():
     """  
 
     query_1 = queries.calculate_metrics(
-        group_by=["lead_time", "nwm_feature_id", "geom"],
-        order_by=["nwm_feature_id","lead_time"],
+        group_by=["reference_time", "nwm_feature_id"],
+        order_by=["nwm_feature_id"],
         filters=[
             {
                 "column": "nwm_feature_id",
                 "operator": "in",
-                "value": "(6731199,2441678,14586327,8573705,2567762,41002752,8268521,41026212,4709060,20957306)"
+                "value": "(17003262)"
             }
         ]
     )
@@ -42,10 +43,29 @@ def get_metrics():
         ]
     )
 
+    query_3 = queries.get_raw_timeseries(
+        filters=[
+            {
+                "column": "nwm_feature_id",
+                "operator": "in",
+                "value": "(17003262)"
+            }
+        ]
+    )
+
     df = pd.read_sql(query_1, config.CONNECTION)
-    print(df.info(memory_usage="deep"))
-    print(df)
-    print(df[["nwm_feature_id", "lead_time", "forecast_count", "r_squared", "bias"]])
+    # print(df.info(memory_usage="deep"))
+    # print(df)
+    print(df[["reference_time","nwm_feature_id", "bias", "max_forecast_delta"]])
+
+    # df = pd.read_sql(query_3, config.CONNECTION)
+    # print(df.info(memory_usage="deep"))
+    # print(df)
+    # print(df[["reference_time","nwm_feature_id", "value_time", "forecast_value", "observed_value"]])
+
+    # sdf = df.loc[df["reference_time"] == "2022-10-01 00:00:00"] 
+    df.plot.scatter(legend=False, x="reference_time", y="max_forecast_delta")
+    plt.savefig("test.png")
 
     # with psycopg2.connect(config.CONNECTION) as conn:
     #     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
