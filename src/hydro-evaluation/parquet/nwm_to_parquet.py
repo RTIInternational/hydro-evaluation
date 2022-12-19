@@ -31,21 +31,20 @@ def nwm_to_parquet(df: pd.DataFrame, reference_time):
     # convert to US units
     df["value"] = df["value"]/(0.3048**3)
     df["measurement_unit"] = "ft3/s"
+    df["lead_time"] = df["value_time"] - df["reference_time"]
 
-    df.to_parquet(f"parquet/{reference_time}.parquet")
+    # write parquet
+    df.to_parquet(f"parquet/data/{reference_time}.parquet")
     
-
-
 
 def ingest_nwm():
-    
     # Setup some criteria
     ingest_days = 20
     start_dt = datetime(2022, 10, 1) # First one is at 00Z in date
     td = timedelta(hours=6)
     number_of_forecasts = ingest_days * 4
 
-    # Loop though forecasts, fetch and insert
+    # Loop though forecasts, fetch and save as parquet
     for f in range(number_of_forecasts):
         reference_time = start_dt + td * f
         ref_time_str = reference_time.strftime("%Y%m%dT%HZ")
