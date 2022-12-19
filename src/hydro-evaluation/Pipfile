@@ -17,6 +17,7 @@ prefect = "*"
 matplotlib = "*"
 pyarrow = "*"
 duckdb = "*"
+rioxarray = "*"
 
 [dev-packages]
 memory-profiler = "*"
