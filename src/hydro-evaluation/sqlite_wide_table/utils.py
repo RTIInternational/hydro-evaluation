@@ -35,34 +35,23 @@ def profile(fn):
 def insert_bulk(df: pd.DataFrame, table_name: str, columns: List[str]):
     """Here we are going save the dataframe in memory and use copy_from() to copy it to the table
     """
-    # save dataframe to an in memory buffer
-    buffer = StringIO()
-    df.to_csv(buffer, header=False, index=False)
-    buffer.seek(0)
 
     temp_table_name = f"temp_{table_name}"
 
     conn = sqlite3.connect(config.CONNECTION)
 
     cursor = conn.cursor()
+
     # Creates temporary empty table with same columns and types as
     # the final table
-    cursor.execute(
-        f"""
-        CREATE TABLE {temp_table_name} (LIKE {table_name} INCLUDING DEFAULTS)
-        """
-    )
-
-    # Copy stream data to the created temporary table in DB
-    cursor.copy_from(buffer, temp_table_name,
-                        sep=",", columns=columns)
+    df.to_sql(temp_table_name, conn)
 
     # Inserts copied data from the temporary table to the final table
     # updating existing values at each new conflict
     cursor.execute(
         f"""
         INSERT INTO {table_name}({', '.join(columns)})
-        SELECT {', '.join(columns)} FROM {temp_table_name} ON CONFLICT DO NOTHING;
+        SELECT {', '.join(columns)} FROM {temp_table_name};
         """
     )
 

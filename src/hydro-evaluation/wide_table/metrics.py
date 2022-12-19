@@ -21,12 +21,13 @@ def get_metrics():
 
     query_1 = queries.calculate_metrics(
         group_by=["reference_time", "nwm_feature_id"],
-        order_by=["nwm_feature_id"],
+        order_by=["nwm_feature_id", "max_forecast_delta"],
         filters=[
             {
                 "column": "nwm_feature_id",
                 "operator": "in",
-                "value": "(17003262)"
+                # "value": "(17003262)"
+                "value": "(6731199,2441678,14586327,8573705,2567762,41002752,8268521,41026212,4709060,20957306)"
             }
         ]
     )
@@ -47,8 +48,8 @@ def get_metrics():
         filters=[
             {
                 "column": "nwm_feature_id",
-                "operator": "in",
-                "value": "(17003262)"
+                "operator": "=",
+                "value": "17003262"
             }
         ]
     )
@@ -64,7 +65,7 @@ def get_metrics():
     # print(df[["reference_time","nwm_feature_id", "value_time", "forecast_value", "observed_value"]])
 
     # sdf = df.loc[df["reference_time"] == "2022-10-01 00:00:00"] 
-    df.plot.scatter(legend=False, x="reference_time", y="max_forecast_delta")
+    df.plot.scatter(legend=False, x="bias", y="max_forecast_delta")
     plt.savefig("test.png")
 
     # with psycopg2.connect(config.CONNECTION) as conn:
