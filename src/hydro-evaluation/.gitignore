@@ -163,3 +163,5 @@ cython_debug/
 *.sqlite
 *.parquet
 *.png
+*.tif
+*.nc
