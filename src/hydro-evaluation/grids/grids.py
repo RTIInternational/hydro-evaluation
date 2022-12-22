@@ -120,7 +120,10 @@ def get_dataset(
 def ds_to_tiff(ds: xr.Dataset, variable: str, filepath: str):
     """Saves xr.Dataset to geotiff"""
 
-    ds[variable].rio.to_raster(filepath)
+    ds[variable].rio.to_raster(
+        filepath,
+        compress='LZW'
+    )
 
 
 def _format_tiff_name(blob_name: str):
@@ -148,10 +151,12 @@ def create_raster_table(filepath: str):
     subprocess.call(cmd, shell=True)
 
 
-def get_load_raster(blob_name: str):
+def get_load_raster(blob_name: str, use_cache: bool = True):
+    print(f"Fetching {blob_name}")
     filepath = os.path.join(GRID_DIR, _format_tiff_name(blob_name))
-    ds = get_dataset(blob_name)
-    ds_to_tiff(ds, "RAINRATE", filepath)
+    if not os.path.exists(filepath) and use_cache:
+        ds = get_dataset(blob_name)
+        ds_to_tiff(ds, "RAINRATE", filepath)
     load_raster_to_db(filepath)
 
 
@@ -169,13 +174,16 @@ def main():
         reference_time = start_dt + td * f
         ref_time_str = reference_time.strftime("%Y%m%dT%HZ")
         
-        print(ref_time_str)
+        print(f"Start download of {ref_time_str}")
 
         blob_list = list_blobs(
             configuration = "forcing_medium_range",
             reference_time = ref_time_str,
             must_contain = "forcing"
         )
+
+        # for blob_name in blob_list:
+        #     get_load_raster(blob_name)
 
         # Set max processes
         max_processes = max((os.cpu_count() - 2), 1)
