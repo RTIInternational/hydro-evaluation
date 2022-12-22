@@ -6,7 +6,7 @@ There are many different types of users who need to evaluate hydrologic models a
 The envisioned hydro-evaluation system (HES) will consist of a core system that can be utilized directly or can be extended to meet specific use cases not covered by the core system.
 
 ## Use Cases
-For development design and planning two primary use cases were identified.  These are expected to be representative of many uses cases but will not completely cover other uses cases.  Therefore, modularity, flexibility and extendability will be key design concepts.
+For development design and planning two primary use cases were identified.  These are expected to be representative of many use cases but will not completely cover other uses cases.  Therefore, modularity, flexibility and extendability will be key design concepts.
 
 * CIROH researcher (See @kvanwerkhoven Power Point)
     * As a CIROH researcher I want to...
@@ -15,7 +15,7 @@ For development design and planning two primary use cases were identified.  Thes
     * As a member of ISED I want to...
 
 ## Existing Systems
-There are several existing systems that provide some of the envisioned functionality.  The extent to which these systems overlap with what is envision for this project is unknown and needs to be researched.
+There are several existing systems that provide some of the envisioned functionality.  The extent to which these systems overlap with what is envisioned for this project is unknown and needs to be researched.
 
 * Water Resources Evaluation System (WRES)/Water Resources Data System (WRDS) - [Not 100% sure I got these names correct] An existing OWP evaluation system.  WRDS provides NWM data.  WRES allows a user to setup an evaluation and execute it.
 * ILAMB
@@ -30,7 +30,7 @@ A core evaluation system that can be customized and utilized to meet the needs o
 
 While these use cases are not the same, the premise is, from a technology perspective, there may be core components that are the same between the two use cases.  This is a good place to focus, to begin with.
 
-Unlike the current WRES/WRDS systems, we anticipate the the new HES will allow for a more interactive experience.  The WRES is a single pass; define the study, execute the study, review the results, the HES will take a more interactive approach where the user defines a study, the system fetches all the relevant data and pre-processes it and loads it into a database where it can be explored and evaluated.
+Unlike the current WRES/WRDS systems, we anticipate the new HES will allow for a more interactive experience.  The WRES is a single pass; define the study, execute the study, review the results, the HES will take a more interactive approach where the user defines a study, the system fetches all the relevant data, pre-processes it, and loads it into a database where it can be explored and evaluated.
 
 ## Concept
 Data will be stored as close to raw as practical and use the power of SQL to build materialized views and query out the required information.
@@ -55,7 +55,7 @@ Other components:
 ### Data loading
 * Code library
     * Data can come from many different sources and in many different formats.
-        * A central data service such as something similar to WRDS for NWM data.  This could be part of the "National Water Model in a Box" (NWMiaB).  While this will likely be a major way that data is loaded into the HES, particularly for use cases where NextGen/NWMiaB is the source, the HES mist consider data from other sources as well.
+        * A central data service such as something similar to WRDS for NWM data.  This could be part of the "National Water Model in a Box" (NWMiaB).  While this will likely be a major way that data is loaded into the HES, particularly for use cases where NextGen/NWMiaB is the source, the HES must consider data from other sources as well.
     * Gridded forcing datasets -> MAP, MAT at HUCXX scale.
     * NWIS for USGS gage data
     * AHPS forecasts
@@ -70,9 +70,9 @@ Other components:
 * Configurations (study definitions, recipes, etc.)
 * Library should support automated, scheduled or on demand runs as required per use case.
 
-As with other parts of the system, there are various use cases that will require different ways of loading data into the system.  For example, for the ISED use case the use case may require that certain data is continuously loaded in to the HES such that is is essentially always ready to conduct an evaluation.  In this case the data loading process needs to be executed as part of a scheduled job along with any pre-processing steps such as building materialized views.
+As with other parts of the system, there are various use cases that will require different ways of loading data into the system.  For example, for the ISED use case, the use case may require that certain data is continuously loaded in to the HES such that is is essentially always ready to conduct an evaluation.  In this case the data loading process needs to be executed as part of a scheduled job along with any pre-processing steps such as building materialized views.
 
-In contrast, the research user may be load data from a fixed set of model runs that are part of a study to answer a particular question (e.g., does model formulation A perform better than the baseline formulation in region X).  In this case the user would likely want to load the data and pre-process it once, then generate a standard evaluation report and then explore the data to understand the results.
+In contrast, the research user may be loading data from a fixed set of model runs that are part of a study to answer a particular question (e.g., does model formulation A perform better than the baseline formulation in region X).  In this case the user would likely want to load the data and pre-process it once, then generate a standard evaluation report and then explore the data to understand the results.
 
 Some data could be loaded as part of a "new instance initialization"  This could include static geographic data such as HUC boundaries, USGS gage locations, etc.  Could also include cross-walk tables to relate various datasets, such as geographic locations, parameters, etc.
 
