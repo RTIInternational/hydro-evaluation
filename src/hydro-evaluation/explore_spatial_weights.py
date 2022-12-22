@@ -8,7 +8,15 @@ ds = xr.open_dataset(
     engine='h5netcdf',
     # mask_and_scale=False
 )
-print(ds)
+# print(ds)
+# print(ds.sel(polyid = 41000611).to_dataframe())
+
+df = ds[['IDmask','weight','regridweight','i_index','j_index']].to_dataframe()
+ds2 = df.to_xarray()
+print(ds2)
+ds2.to_netcdf("cross_walk.nc", engine='h5netcdf',)
+print(df)
+
 # df = ds.to_dataframe() #.reset_index()
 # print(df)
 
