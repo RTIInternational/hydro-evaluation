@@ -164,10 +164,10 @@ def get_load_raster(blob_name: str, use_cache: bool = True):
 def main():
 
     # Setup some criteria
-    ingest_days = 10
-    start_dt = datetime(2022, 10, 1) # First one is at 00Z in date
+    ingest_days = 1
+    start_dt = datetime(2022, 10, 6) # First one is at 00Z in date
     td = timedelta(hours=6)
-    number_of_forecasts = ingest_days * 4
+    number_of_forecasts = int(ingest_days * 4)
 
     # Loop though forecasts, fetch and insert
     for f in range(number_of_forecasts):
