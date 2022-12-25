@@ -10,9 +10,8 @@ import geopandas as gpd
 import numpy as np
 import psycopg2
 import psycopg2.extras
-import wide_table.config as config
-import wide_table.queries as queries
-from wide_table.utils import profile
+import grids.config as config
+from grids.utils import profile
 import matplotlib.pyplot as plt
 from sqlalchemy import create_engine, text
 
@@ -25,16 +24,12 @@ def generate_map_query(group_by: List[str], order_by: List[str], filters: List[d
     query = f"""
         WITH medium_range_map AS (
             SELECT
-                huc10.huc10 AS huc10,
-                huc10.geom as geom,
-                raster.reference_time,
-                --raster.reference_time + INTERVAL '1 hour' * raster.lead_time AS value_time,
-                --raster.lead_time,
-                (ST_SummaryStatsAgg(ST_Clip(raster.rast, huc10.geom, true), 1, true)).*
+                {",".join(group_by)},
+                (ST_SummaryStatsAgg(ST_Clip(raster.rast, huc10.geom, true), 1, true)).mean as value
             FROM
                 forcing_medium_range_attrs as raster
-            INNER join huc10 on
-                ST_INTERSECTS(huc10.geom, raster.rast)
+            INNER JOIN huc10 on
+                ST_INTERSECTS(geom, rast)
             GROUP BY
                 {",".join(group_by)}
             ORDER BY
@@ -51,7 +46,14 @@ def get_map():
     """  
 
     query = generate_map_query(
-        group_by=["huc10", "reference_time", "geom"],
+                        
+        group_by=[
+            "huc10",
+            "reference_time", 
+            "geom",
+            "value_time",
+            "lead_time",
+        ],
         order_by=["reference_time"],
         filters=[
             {
@@ -62,7 +64,7 @@ def get_map():
             {
                 "column": "reference_time",
                 "operator": "=",
-                "value": "'2022-10-01 12:00:00'"
+                "value": "'2022-10-01 18:00:00'"
             }
         ]
     )
@@ -70,10 +72,12 @@ def get_map():
     # print(query)
     df = pd.read_sql(text(query), config.CONNECTION)
     print(df.info(memory_usage="deep"))
-    gs = gpd.GeoSeries.from_wkb(df["geom"])
-    gdf = gpd.GeoDataFrame(df, geometry=gs)
-    gdf.plot("mean", legend=True)
-    plt.savefig("2022-10-01_12:00:00.png")
+    print(df)
+
+    # gs = gpd.GeoSeries.from_wkb(df["geom"])
+    # gdf = gpd.GeoDataFrame(df, geometry=gs)
+    # gdf.plot("mean", legend=True)
+    # plt.savefig("2022-10-01_18:00:00.png")
     
 
     # sdf = df.loc[df["reference_time"] == "2022-10-01 00:00:00"] 
