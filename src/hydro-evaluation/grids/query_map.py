@@ -25,7 +25,7 @@ def generate_map_query(group_by: List[str], order_by: List[str], filters: List[d
         WITH medium_range_map AS (
             SELECT
                 {",".join(group_by)},
-                (ST_SummaryStatsAgg(ST_Clip(raster.rast, huc10.geom, true), 1, true)).mean as value
+                (ST_SummaryStatsAgg(ST_Clip(rast, geom, true), 1, true)).mean as value
             FROM
                 forcing_medium_range_attrs as raster
             INNER JOIN huc10 on
