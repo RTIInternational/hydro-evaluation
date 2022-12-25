@@ -12,7 +12,7 @@ import wide_table.config as config
 def create_map_view():
     qry = """
         DROP VIEW forcing_medium_range_attrs;
-        CREATE VIEW forcing_medium_range_attrs AS (
+        CREATE OR REPLACE VIEW forcing_medium_range_attrs AS (
         SELECT 
             fmra.rast,
             fmra.filename, 
@@ -22,8 +22,14 @@ def create_map_view():
                     rtrim(ltrim(split_part(fmra.filename,'.',5), 't'), 'z') 
                 ) ,'YYYYMMDDHH24'
             ) AS reference_time,
+            to_timestamp(
+                concat(
+                    split_part(fmra.filename,'.',2),
+                    rtrim(ltrim(split_part(fmra.filename,'.',5), 't'), 'z') 
+                ) ,'YYYYMMDDHH24'
+            )  + INTERVAL '1 hour' * ltrim(split_part(fmra.filename,'.',8),'f')::int4 AS value_time,
             ltrim(split_part(fmra.filename,'.',8),'f')::int4 AS lead_time
-        FROM grids.forcing_medium_range fmra
+        FROM forcing_medium_range fmra
         );
     """
 

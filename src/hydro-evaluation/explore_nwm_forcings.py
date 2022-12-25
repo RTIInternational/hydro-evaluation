@@ -20,7 +20,17 @@ PARAMETER["false_northing",0.0],PARAMETER["central_meridian",-97.0],PARAMETER["s
 PARAMETER["standard_parallel_2",60.0],PARAMETER["latitude_of_origin",40.0],UNIT["Meter",1.0]]'
 
 # ds["RAINRATE"].rio.to_raster("nwm_grid.tif", crs=wkt)
-ds["RAINRATE"].rio.to_raster("nwm_grid.tif")
+rain_ds = ds["RAINRATE"]
+# rain_ds.rio.to_raster("nwm_grid.tif", compress="LZW")
+rain_ds.to_netcdf("rainrate.nc", engine='h5netcdf')
+
+ds2 = xr.open_dataset(
+    "rainrate.nc",
+    engine='h5netcdf',
+    mask_and_scale=False,
+    decode_coords="all"
+)
+ds2["RAINRATE"].rio.to_raster("nwm_grid.tif", compress="LZW")
 
 # print(ds.variables.get("RAINRATE").attrs.get("proj4"))
 
