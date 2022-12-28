@@ -1,20 +1,16 @@
-import psycopg2
-import subprocess 
-import sys, os
-import xarray as xr
-import rioxarray
-from google.cloud import storage
-from io import BytesIO
 import os
 import subprocess
-import grids.config as config
-from grids.utils import profile
-from datetime import datetime, timedelta
 from concurrent.futures import ProcessPoolExecutor
+from datetime import datetime, timedelta
+from io import BytesIO
 
+import xarray as xr
+from google.cloud import storage
+
+import grids.config as config
+from grids.utils import get_cache_dir, profile
 
 BUCKET = "national-water-model"
-GRID_DIR = os.path.join("grids", "data")
 
 
 def list_blobs(
@@ -103,7 +99,10 @@ def get_dataset(
             The data stored in the blob.
         
         """
-        nc_filepath = os.path.join(config.NWM_CACHE, _format_nc_name(blob_name))
+        nc_filepath = os.path.join(
+            get_cache_dir(),
+            _format_nc_name(blob_name)
+        )
 
         # If the file exists and use_cache = True
         if os.path.exists(nc_filepath) and use_cache:
@@ -144,7 +143,10 @@ def get_dataset(
 def ds_to_tiff(ds: xr.Dataset, variable: str, blob_name: str) -> str:
     """Saves xr.Dataset to geotiff"""
 
-    filepath = os.path.join(config.NWM_CACHE, _format_tiff_name(blob_name))
+    filepath = os.path.join(
+        get_cache_dir(),
+        _format_tiff_name(blob_name)
+    )
 
     ds[variable].rio.to_raster(
         filepath,
@@ -181,7 +183,7 @@ def load_raster_to_db(filepath: str):
 def get_load_raster(blob_name: str, use_cache: bool = True):
     """Get and load the raster to the DB"""
     print(f"Fetching {blob_name}")
-    ds = get_dataset(blob_name)
+    ds = get_dataset(blob_name, use_cache)
     tiff_filepath = ds_to_tiff(ds, "RAINRATE", blob_name)
     load_raster_to_db(tiff_filepath)
     delete_tiff(tiff_filepath)
@@ -193,9 +195,9 @@ def main():
     # Setup some criteria
     ingest_days = 1
     forecast_interval_hrs = 6
-    start_dt = datetime(2022, 10, 1) # First one is at 00Z in date
+    start_dt = datetime(2022, 10, 2) # First one is at 00Z in date
     td = timedelta(hours=forecast_interval_hrs)
-    number_of_forecasts = int(ingest_days * 24/forecast_interval_hrs)
+    number_of_forecasts = 2  # int(ingest_days * 24/forecast_interval_hrs)
 
     # Loop though forecasts, fetch and insert
     for f in range(number_of_forecasts):
@@ -208,7 +210,7 @@ def main():
             configuration = "forcing_medium_range",
             reference_time = ref_time_str,
             must_contain = "forcing"
-        )
+        )[:5]
 
         # for blob_name in blob_list:
         #     get_load_raster(blob_name)

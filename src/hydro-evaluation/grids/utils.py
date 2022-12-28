@@ -1,11 +1,20 @@
-import time
 import os
+import time
 from functools import wraps
+
 import grids.config as config
 
-def create_cache_dir():
-    if not os.path.exists(config.NWM_CACHE):
+
+def get_cache_dir(create: bool = True):
+
+    if not os.path.exists(config.NWM_CACHE) and create:
         os.mkdir(config.NWM_CACHE)
+
+    if not os.path.exists(config.NWM_CACHE):
+        raise NotADirectoryError
+
+    return config.NWM_CACHE
+
 
 def profile(fn):
     @wraps(fn)
