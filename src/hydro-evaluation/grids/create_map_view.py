@@ -1,17 +1,17 @@
-import time
-from io import StringIO
-from typing import List
-from functools import wraps
-from pathlib import Path
-
-import pandas as pd
 import psycopg2
 import psycopg2.extras
+
 import wide_table.config as config
 
+
 def create_map_view():
+    """Create a detailed raster view.
+
+    This view adds reference_time, lead_time and value_time to raster table.
+    
+    """
     qry = """
-        DROP VIEW forcing_medium_range_attrs;
+        --DROP VIEW forcing_medium_range_attrs;
         CREATE OR REPLACE VIEW forcing_medium_range_attrs AS (
         SELECT 
             fmra.rast,
