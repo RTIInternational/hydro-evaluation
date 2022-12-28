@@ -1,26 +1,30 @@
 import io
-import time
-from io import StringIO
-from typing import List
-from functools import wraps
-from pathlib import Path
 import json
-import pandas as pd
+import time
+from functools import wraps
+from io import StringIO
+from pathlib import Path
+from typing import List
+
 import geopandas as gpd
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import psycopg2
 import psycopg2.extras
+from sqlalchemy import create_engine, text
+
 import grids.config as config
 from grids.utils import profile
-import matplotlib.pyplot as plt
-from sqlalchemy import create_engine, text
 
 
 def format_filters(filters):
-        return [f'{f["column"]} {f["operator"]} {f["value"]}' for f in filters]
+        return [f"""{f["column"]} {f["operator"]} '{f["value"]}'""" for f in filters]
 
 
 def generate_map_query(group_by: List[str], order_by: List[str], filters: List[dict]) -> str:
+    """Generate query string for getting MAP"""
+
     query = f"""
         WITH medium_range_map AS (
             SELECT
@@ -42,29 +46,27 @@ def generate_map_query(group_by: List[str], order_by: List[str], filters: List[d
 
 @profile
 def get_map():
-    """Get map from database
-    """  
+    """Get MAP from database."""  
 
     query = generate_map_query(
-                        
         group_by=[
             "huc10",
             "reference_time", 
             "geom",
-            "value_time",
-            "lead_time",
+            # "value_time",
+            # "lead_time",
         ],
         order_by=["reference_time"],
         filters=[
             {
                 "column": "huc10",
                 "operator": "like",
-                "value": "'030501%'"
+                "value": "03%"
             },
             {
                 "column": "reference_time",
                 "operator": "=",
-                "value": "'2022-10-01 18:00:00'"
+                "value": "2022-10-01 00:00:00"
             }
         ]
     )
@@ -74,17 +76,11 @@ def get_map():
     print(df.info(memory_usage="deep"))
     print(df)
 
-    # gs = gpd.GeoSeries.from_wkb(df["geom"])
-    # gdf = gpd.GeoDataFrame(df, geometry=gs)
-    # gdf.plot("mean", legend=True)
-    # plt.savefig("2022-10-01_18:00:00.png")
+    gs = gpd.GeoSeries.from_wkb(df["geom"])
+    gdf = gpd.GeoDataFrame(df, geometry=gs)
+    gdf.plot("value", legend=True)
+    plt.savefig("2022-10-01_00:00:00.png")
     
-
-    # sdf = df.loc[df["reference_time"] == "2022-10-01 00:00:00"] 
-    # df.plot.scatter(legend=False, x="bias", y="max_forecast_delta")
-    # plt.savefig("test.png")
-
-
 
 if __name__ == "__main__":
     get_map()
