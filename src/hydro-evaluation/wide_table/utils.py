@@ -1,12 +1,16 @@
 import time
-from io import StringIO
-from typing import List
 from functools import wraps
+from io import StringIO
 from pathlib import Path
+from typing import List
 
+import geopandas as gpd
+import numpy as np
 import pandas as pd
 import psycopg2
 import psycopg2.extras
+import xarray as xr
+
 import wide_table.config as config
 
 
@@ -56,8 +60,12 @@ def insert_bulk(df: pd.DataFrame, table_name: str, columns: List[str]):
                 )
 
                 # Copy stream data to the created temporary table in DB
-                cursor.copy_from(buffer, temp_table_name,
-                                 sep=",", columns=columns)
+                cursor.copy_from(
+                    buffer,
+                    temp_table_name,
+                    sep=",",
+                    null="",
+                    columns=columns)
 
                 # Inserts copied data from the temporary table to the final table
                 # updating existing values at each new conflict
@@ -99,3 +107,37 @@ def get_xwalk() -> pd.DataFrame:
     # print(df.head)
 
     return df
+
+
+def get_route_links() -> pd.DataFrame:
+
+    file = config.ROUTE_LINK_FILE
+
+    ds = xr.open_dataset(file)
+
+    df = ds.to_dataframe()
+
+    df["gages"] = df["gages"].str.decode("utf-8").str.strip()
+    df.rename(
+        columns={
+            "link": "nwm_feature_id",
+            "from": "from_node",
+            "to": "to_node",
+            "gages": "gage_id",
+            "lon": "longitude",
+            "lat": "latitude"
+        },
+        inplace=True
+    )
+
+    return df[["nwm_feature_id", "from_node", "to_node", "longitude", "latitude", "gage_id"]]
+
+
+def get_usgs_gages() -> gpd.GeoDataFrame():
+    query = """
+        SELECT * FROM usgs_gages;
+    """
+
+    gdf = gpd.read_postgis(query)
+
+    return gdf

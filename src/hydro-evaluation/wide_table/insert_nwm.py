@@ -1,8 +1,11 @@
 
-from wide_table.utils import profile, insert_bulk
-from hydrotools.nwm_client import gcp as nwm
 from datetime import datetime, timedelta
+
 import pandas as pd
+from hydrotools.nwm_client import gcp as nwm
+
+from wide_table.utils import insert_bulk, profile
+
 
 @profile
 def fetch_nwm(reference_time: str) -> pd.DataFrame:
