@@ -5,9 +5,9 @@ Revises: 93190042040a
 Create Date: 2022-12-09 12:11:44.854551
 
 """
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = '924168a17e91'
@@ -18,13 +18,14 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute("""
-        CREATE EXTENSION postgis;
+        CREATE EXTENSION IF NOT EXISTS postgis;
+        CREATE EXTENSION IF NOT EXISTS postgis_raster;
     """)
-    # pass
+    pass
 
 
 def downgrade() -> None:
-    op.execute("""
-        DROP EXTENSION postgis;
-    """)
-    # pass
+    # op.execute("""
+    #     DROP EXTENSION postgis;
+    # """)
+    pass

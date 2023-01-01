@@ -1,13 +1,14 @@
 import pandas as pd
-import xarray as xr
 import rioxarray
+import xarray as xr
 
 ds = xr.open_dataset(
-    "/home/matt/Downloads/nwm.20221001_forcing_medium_range_nwm.t00z.medium_range.forcing.f001.conus.nc",
+    "/home/matt/cache/nwm.20221001.forcing_medium_range.nwm.t00z.medium_range.forcing.f001.conus.nc",
     engine='h5netcdf',
     mask_and_scale=False,
     decode_coords="all"
 )
+print(ds["RAINRATE"])
 # print(ds.crs.spatial_ref)
 # df = ds.to_dataframe() #.reset_index()
 # print(df["RAINRATE"])
@@ -20,17 +21,17 @@ PARAMETER["false_northing",0.0],PARAMETER["central_meridian",-97.0],PARAMETER["s
 PARAMETER["standard_parallel_2",60.0],PARAMETER["latitude_of_origin",40.0],UNIT["Meter",1.0]]'
 
 # ds["RAINRATE"].rio.to_raster("nwm_grid.tif", crs=wkt)
-rain_ds = ds["RAINRATE"]
+# rain_ds = ds["RAINRATE"]
 # rain_ds.rio.to_raster("nwm_grid.tif", compress="LZW")
-rain_ds.to_netcdf("rainrate.nc", engine='h5netcdf')
+# rain_ds.to_netcdf("rainrate.nc", engine='h5netcdf')
 
-ds2 = xr.open_dataset(
-    "rainrate.nc",
-    engine='h5netcdf',
-    mask_and_scale=False,
-    decode_coords="all"
-)
-ds2["RAINRATE"].rio.to_raster("nwm_grid.tif", compress="LZW")
+# ds2 = xr.open_dataset(
+#     "rainrate.nc",
+#     engine='h5netcdf',
+#     mask_and_scale=False,
+#     decode_coords="all"
+# )
+# ds2["RAINRATE"].rio.to_raster("nwm_grid.tif", compress="LZW")
 
 # print(ds.variables.get("RAINRATE").attrs.get("proj4"))
 
