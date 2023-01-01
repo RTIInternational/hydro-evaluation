@@ -48,38 +48,44 @@ def generate_map_query(group_by: List[str], order_by: List[str], filters: List[d
 def get_map():
     """Get MAP from database."""  
 
-    query = generate_map_query(
-        group_by=[
-            "huc10",
-            "reference_time", 
-            "geom",
-            # "value_time",
-            # "lead_time",
-        ],
-        order_by=["reference_time"],
-        filters=[
-            {
-                "column": "huc10",
-                "operator": "like",
-                "value": "03%"
-            },
-            {
-                "column": "reference_time",
-                "operator": "=",
-                "value": "2022-10-01 00:00:00"
-            }
-        ]
-    )
- 
-    # print(query)
-    df = pd.read_sql(text(query), config.CONNECTION)
-    print(df.info(memory_usage="deep"))
-    print(df)
+    for i in range(5):
 
-    gs = gpd.GeoSeries.from_wkb(df["geom"])
-    gdf = gpd.GeoDataFrame(df, geometry=gs)
-    gdf.plot("value", legend=True)
-    plt.savefig("2022-10-01_00:00:00.png")
+        query = generate_map_query(
+            group_by=[
+                "huc10",
+                "reference_time", 
+                "geom",
+                # "value_time",
+                "lead_time",
+            ],
+            order_by=["reference_time", "huc10"],
+            filters=[
+                {
+                    "column": "huc10",
+                    "operator": "like",
+                    "value": "0303%"
+                },
+                {
+                    "column": "reference_time",
+                    "operator": "=",
+                    "value": "2022-10-01 00:00:00"
+                },
+                {
+                    "column": "lead_time",
+                    "operator": "=",
+                    "value": str(i + 1)
+                }
+                
+            ]
+        )
+    
+        # print(query)
+        df = pd.read_sql(text(query), config.CONNECTION)
+
+        gs = gpd.GeoSeries.from_wkb(df["geom"])
+        gdf = gpd.GeoDataFrame(df, geometry=gs)
+        gdf.plot("value", legend=True)
+        plt.savefig(f"2022-10-01_00:00:00_t{i + 1}.png")
     
 
 if __name__ == "__main__":

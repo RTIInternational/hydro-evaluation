@@ -1,7 +1,9 @@
 
-from wide_table.utils import profile
-from hydrotools.nwm_client import gcp as nwm
 import pandas as pd
+from hydrotools.nwm_client import gcp as nwm
+
+from wide_table.utils import profile
+
 
 @profile
 def fetch_nwm():
