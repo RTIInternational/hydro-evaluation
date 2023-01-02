@@ -1,4 +1,6 @@
 import time
+import os
+import inspect
 from io import StringIO
 from typing import List
 from functools import wraps
@@ -80,11 +82,13 @@ def insert_bulk(df: pd.DataFrame, table_name: str, columns: List[str]):
     conn.close()
 
 
-def get_xwalk(file) -> pd.DataFrame:
+def get_xwalk(file=None) -> pd.DataFrame:
     if file is None:
-        file = Path(__file__).resolve().parent.parent / \
-        "data/RouteLink_CONUS_NWMv2.1.6.csv",
-    
+        file = str(Path(
+                        inspect.getfile(inspect.currentframe())
+                        ).resolve().parent.parent
+                  ) + '/data/RouteLink_CONUS_NWMv2.1.6.csv'
+        
     df = pd.read_csv(
         file,
         dtype={
