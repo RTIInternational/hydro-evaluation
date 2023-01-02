@@ -80,12 +80,13 @@ def insert_bulk(df: pd.DataFrame, table_name: str, columns: List[str]):
     conn.close()
 
 
-def get_xwalk() -> pd.DataFrame:
-    file = Path(__file__).resolve().parent.parent / \
+def get_xwalk(file) -> pd.DataFrame:
+    if file is None:
+        file = Path(__file__).resolve().parent.parent / \
         "data/RouteLink_CONUS_NWMv2.1.6.csv",
-
+    
     df = pd.read_csv(
-        file[0],
+        file,
         dtype={
             "nwm_feature_id": int,
             "usgs_site_code": str,
