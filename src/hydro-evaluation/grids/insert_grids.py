@@ -90,8 +90,12 @@ def get_dataset(
 
         Parameters
         ----------
-        blob_name : str, required
+        blob_name: str, required
             Name of blob to retrieve.
+        use_cacahe: bool, default True
+            If cache should be used.  
+            If True, checks to see if file is in cache, and 
+            if fetched from remote will save to cache.
 
         Returns
         -------
@@ -141,7 +145,7 @@ def get_dataset(
 
 
 def ds_to_tiff(ds: xr.Dataset, variable: str, blob_name: str) -> str:
-    """Saves xr.Dataset to geotiff"""
+    """Saves xr.Dataset to geotiff."""
 
     filepath = os.path.join(
         get_cache_dir(),
@@ -171,10 +175,25 @@ def _format_nc_name(blob_name: str):
     return blob_name.replace("/", ".")
 
 
-def load_raster_to_db(filepath: str):
+def load_raster_to_db(filepath: str, table_name: str):
+    """Loads raster to database table using PostGIS raster2pgsql utility."""
+
+    # Check that raster2pgsql is installed
+    cmd = f'raster2pgsq1'
+    resp = subprocess.call(cmd, shell=True)
+    if resp == 127:
+        raise RuntimeError(f"Runtime error.  Response code {resp}.  Make sure {cmd} is installed.")
+    if resp > 0:
+        raise RuntimeError(f"Runtime error.  Response code {resp}.  Make sure {cmd} is installed.")
+
+    # Check that psql is installed and 
+    cmd = f'psql --version'
+    resp = subprocess.call(cmd, shell=True)
+    if resp > 0:
+        raise RuntimeError(f"Runtime error.  Response code {resp}.  Make sure {cmd} is installed.")
 
     # Build command string
-    cmd = f'raster2pgsql -F -a -t "288x256" {filepath} forcing_medium_range | psql {config.CONNECTION}'
+    cmd = f'raster2pgsql -F -a -t "288x256" {filepath} {table_name} | psql {config.CONNECTION}'
 
     # Execute
     subprocess.call(cmd, shell=True)
@@ -185,7 +204,7 @@ def get_load_raster(blob_name: str, use_cache: bool = True):
     print(f"Fetching {blob_name}")
     ds = get_dataset(blob_name, use_cache)
     tiff_filepath = ds_to_tiff(ds, "RAINRATE", blob_name)
-    load_raster_to_db(tiff_filepath)
+    load_raster_to_db(tiff_filepath, "forcing_medium_range")
     delete_tiff(tiff_filepath)
 
 
