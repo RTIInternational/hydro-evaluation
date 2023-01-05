@@ -19,6 +19,7 @@ pyarrow = "*"
 duckdb = "*"
 rioxarray = "*"
 geopandas = "*"
+cftime = "*"
 
 [dev-packages]
 memory-profiler = "*"
