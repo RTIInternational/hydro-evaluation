@@ -179,7 +179,7 @@ def load_raster_to_db(filepath: str, table_name: str):
     """Loads raster to database table using PostGIS raster2pgsql utility."""
 
     # Build command string
-    cmd = f'raster2pgsql -s 990000 -F -c -C -I -t "288x256" {filepath} {table_name} | psql {config.CONNECTION}'
+    cmd = f'raster2pgsql -F -a -t "288x256" {filepath} {table_name} | psql {config.CONNECTION}'
 
     # Execute
     subprocess.call(cmd, shell=True)
