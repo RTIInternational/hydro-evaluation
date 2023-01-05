@@ -178,22 +178,8 @@ def _format_nc_name(blob_name: str):
 def load_raster_to_db(filepath: str, table_name: str):
     """Loads raster to database table using PostGIS raster2pgsql utility."""
 
-    # Check that raster2pgsql is installed
-    cmd = f'raster2pgsq1'
-    resp = subprocess.call(cmd, shell=True)
-    if resp == 127:
-        raise RuntimeError(f"Runtime error.  Response code {resp}.  Make sure {cmd} is installed.")
-    if resp > 0:
-        raise RuntimeError(f"Runtime error.  Response code {resp}.  Make sure {cmd} is installed.")
-
-    # Check that psql is installed and 
-    cmd = f'psql --version'
-    resp = subprocess.call(cmd, shell=True)
-    if resp > 0:
-        raise RuntimeError(f"Runtime error.  Response code {resp}.  Make sure {cmd} is installed.")
-
     # Build command string
-    cmd = f'raster2pgsql -F -a -t "288x256" {filepath} {table_name} | psql {config.CONNECTION}'
+    cmd = f'raster2pgsql -s 990000 -F -c -C -I -t "288x256" {filepath} {table_name} | psql {config.CONNECTION}'
 
     # Execute
     subprocess.call(cmd, shell=True)
@@ -216,7 +202,7 @@ def main():
     forecast_interval_hrs = 6
     start_dt = datetime(2022, 10, 2) # First one is at 00Z in date
     td = timedelta(hours=forecast_interval_hrs)
-    number_of_forecasts = 2  # int(ingest_days * 24/forecast_interval_hrs)
+    number_of_forecasts = 1  # int(ingest_days * 24/forecast_interval_hrs)
 
     # Loop though forecasts, fetch and insert
     for f in range(number_of_forecasts):
@@ -229,7 +215,7 @@ def main():
             configuration = "forcing_medium_range",
             reference_time = ref_time_str,
             must_contain = "forcing"
-        )[:5]
+        )[:1]
 
         # for blob_name in blob_list:
         #     get_load_raster(blob_name)
