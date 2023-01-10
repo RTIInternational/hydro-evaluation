@@ -1,15 +1,14 @@
 from rasterstats import zonal_stats
 import geopandas as gpd
 import xarray as xr
-# import rasterio
+import rasterio
 import geopandas as gpd
 import pandas as pd
 import matplotlib.pyplot as plt
-
-# import geopandas as gpd
-# import pandas as pd
-# import rasterio
-# import rioxarray as rxr
+from rasterio.features import rasterize
+import numpy as np
+import fiona
+import pickle 
 
 import os
 import subprocess
@@ -168,19 +167,80 @@ def get_dataset(
             return ds
 
 
-def add_zonalstats_to_gdf(
+def generate_weights_file(
     gdf: gpd.GeoDataFrame,
     ds: xr.Dataset
+    ) -> str:
+
+    gdf_proj = gdf.to_crs(config.CONUS_NWM_WKT)
+
+    src = ds["RAINRATE"]
+
+    crosswalk_dict = {}
+
+    for index, row in gdf_proj.iterrows():
+        geom_rasterize = rasterize([(row["geometry"], 1)],
+                                out_shape=src.rio.shape,
+                                transform=src.rio.transform(),
+                                all_touched=True,
+                                fill=0,
+                                dtype='uint8')
+
+        crosswalk_dict[index] = np.where(geom_rasterize == 1)
+
+    with open('saved_weights2.pkl', 'wb') as f:
+        pickle.dump(crosswalk_dict, f)
+
+
+def calc_zonal_stats_weights(
+    ds: xr.Dataset,
+):
+
+    src = ds["RAINRATE"]
+
+    with open('saved_weights2.pkl', 'rb') as f:
+        crosswalk_dict = pickle.load(f)
+
+    r_array = src.values[0]
+    r_array[r_array == src.rio.nodata] = np.nan
+
+    mean_dict = {}
+    for key, value in crosswalk_dict.items():
+        mean_dict[key] = np.nanmean(r_array[value])
+
+    df = pd.DataFrame.from_dict(mean_dict,
+        orient='index',
+        columns=['mean'])
+
+    return df
+
+
+def add_zonalstats_to_gdf_weights(
+    gdf: gpd.GeoDataFrame,
+    ds: xr.Dataset,
 ) -> gpd.GeoDataFrame:
     """Calculates zonal stats and adds to GeoDataFrame"""
+
     src = ds["RAINRATE"]
-    aff = src.rio.transform()
-    arr = src.values[0]
-    df_zonal_stats = pd.DataFrame(zonal_stats(gdf, arr, affine=aff, nodata=src.rio.nodata, all_touched=True))
+
+    with open('saved_weights2.pkl', 'rb') as f:
+        crosswalk_dict = pickle.load(f)
+
+    r_array = src.values[0]
+    r_array[r_array == src.rio.nodata] = np.nan
+
+    mean_dict = {}
+    for key, value in crosswalk_dict.items():
+        mean_dict[key] = np.nanmean(r_array[value])
+
+    df = pd.DataFrame.from_dict(mean_dict,
+        orient='index',
+        columns=['mean'])
 
     # adding statistics back to original GeoDataFrame
-    gdf2 = pd.concat([gdf, df_zonal_stats], axis=1)
+    gdf2 = pd.concat([gdf, df], axis=1)
     return gdf2
+
 
 
 def make_gdf_canonical(gdf: gpd.GeoDataFrame):
@@ -194,17 +254,34 @@ def calculate_map(blob_name: str, use_cache: bool = True):
     """Get and load the raster to the DB"""
     print(f"Fetching {blob_name}")
 
+    # nwm.20221001/forcing_medium_range/nwm.t00z.medium_range.forcing.f001.conus.nc
+    path_split = blob_name.split("/")
+    ref_date_str = path_split[0].split(".")[1] # 20221001
+    ref_time_str = path_split[2].split(".")[1] # t00z
+    reference_time = datetime.strptime(ref_date_str + ref_time_str, "%Y%m%dt%Hz")
+    offset_hours = int(path_split[2].split(".")[4][1:]) # f001
+    value_time = reference_time + timedelta(hours=offset_hours)
+    configuration = path_split[1]
+
     # huc10_gdf = shape_to_gdf('/home/matt/wbdhu10_conus.shp')
-    huc10_gdf = shape_to_gdf('/home/matt/huc10_lcc.shp')
+    # huc10_gdf = shape_to_gdf('/home/matt/huc10_lcc.shp')
     # print(huc10_gdf)
 
     ds = get_dataset(blob_name, use_cache)
-    gdf = add_zonalstats_to_gdf(huc10_gdf, ds)
+
+    measurement_units = ds["RAINRATE"].attrs["units"]
+    variable_name = ds["RAINRATE"].attrs["standard_name"]
+
+    # generate_weights_file(huc10_gdf, ds)
+
+    df = calc_zonal_stats_weights(ds)
+    print(df)
+
+    # gdf = add_zonalstats_to_gdf_weights(huc10_gdf, ds)
 
     # Do something with the data
-    print(gdf[["HUC10", "mean"]])
-    gdf.plot("mean", legend=True)
-    plt.savefig(f"map_zonal_stats_test.png")
+    # gdf.plot("mean", legend=True)
+    # plt.savefig(f"map_weights_test.png")
 
 
 @profile

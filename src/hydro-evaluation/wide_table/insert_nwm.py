@@ -24,6 +24,7 @@ def fetch_nwm(reference_time: str) -> pd.DataFrame:
     # Look at the data
     # print(forecast_data.info(verbose=True, memory_usage='deep'))
     # print(forecast_data.memory_usage(index=True, deep=True))
+    # print(forecast_data)
 
     # Return the data
     return forecast_data
