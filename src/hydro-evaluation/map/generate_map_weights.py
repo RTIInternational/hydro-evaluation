@@ -179,6 +179,7 @@ def generate_weights_file(
     gdf_proj = gdf.to_crs(config.CONUS_NWM_WKT)
 
     crosswalk_dict = {}
+    # This is a probably a really poor performing way to do this
     for index, row in gdf_proj.iterrows():
         geom_rasterize = rasterize([(row["geometry"], 1)],
                                    out_shape=src.rio.shape,
@@ -296,18 +297,20 @@ def calculate_map(
 
     return df
 
+def main_1():
+    """Geenerate the weights file."""
+    # Not 100% sure how best to manage this yet.  Hope a pattern will emerge.
+    shp_filepath = "/home/matt/wbdhu10_conus.shp"
+    huc10_gdf = shape_to_gdf(shp_filepath)
+    template_blob_name = "nwm.20221001/forcing_medium_range/nwm.t00z.medium_range.forcing.f001.conus.nc"
+    ds = get_dataset(template_blob_name, use_cache=True)
+    src = ds["RAINRATE"]
+    generate_weights_file(huc10_gdf, src, WEIGHTS_FILE_NAME, crosswalk_dict_key="huc10")
+
 
 @profile
-def main():
-
-    # This generates the weights file and only needs to be done once
-    # Not 100% sure how best to manage this yet.  Hope a pattern will emerge.
-    # shp_filepath = "/home/matt/wbdhu10_conus.shp"
-    # huc10_gdf = shape_to_gdf(shp_filepath)
-    # template_blob_name = "nwm.20221001/forcing_medium_range/nwm.t00z.medium_range.forcing.f001.conus.nc"
-    # ds = get_dataset(template_blob_name, use_cache=True)
-    # src = ds["RAINRATE"]
-    # generate_weights_file(huc10_gdf, src, WEIGHTS_FILE_NAME, crosswalk_dict_key="huc10")
+def main_2():
+    """Calculate MAP"""
 
     # Setup some criteria
     ingest_days = 1
@@ -360,4 +363,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # main_1()
+    main_2()
