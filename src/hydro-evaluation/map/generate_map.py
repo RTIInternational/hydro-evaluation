@@ -246,34 +246,6 @@ def main():
         #         chunksize=chunksize
         #     )
 
-    # huc10 = gpd.read_file("/home/matt/huc10_lcc.shp")
-
-    # fc_nc = "/home/matt/cache/nwm.20221001.forcing_medium_range.nwm.t00z.medium_range.forcing.f001.conus.nc"
-
-    # reng = "rasterio"
-
-
-    # # fc_xds = xr.open_dataset(fc_nc, engine=reng)
-    # # fc_xds["RAINRATE"].rio.to_raster("temp.tif")
-    # # with rasterio.open("temp.tif") as src:
-    # #     affine = src.transform
-    # #     array = src.read(1)
-    # #     df_zonal_stats = pd.DataFrame(zonal_stats(huc10, array, affine=affine))
-
-    # # # adding statistics back to original GeoDataFrame
-    # # gdf2 = pd.concat([huc10, df_zonal_stats], axis=1) 
-    # # print(gdf2)
-
-    # with xr.open_dataset(fc_nc, engine=reng) as _xds:
-    #     _src = _xds.RAINRATE
-    #     _aff2 = _src.rio.transform()
-    #     _arr2 = _src.values[0]
-    #     _df_zonal_stats = pd.DataFrame(zonal_stats(huc10, _arr2, affine=_aff2, nodata=-999))
-        
-    # # adding statistics back to original GeoDataFrame
-    # gdf3 = pd.concat([huc10, _df_zonal_stats], axis=1)
-    # print(gdf3)
-
-
+   
 if __name__ == "__main__":
     main()
