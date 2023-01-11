@@ -40,7 +40,7 @@ def shape_to_gdf(filepath: str) -> gpd.GeoDataFrame:
     return gdf
 
 
-def list_blobs(
+def list_blobs_forcing(
         configuration: str,
         reference_time: str,
         must_contain: str = 'channel_rt'
@@ -79,6 +79,46 @@ def list_blobs(
     blobs = client.list_blobs(
         bucket,
         prefix=f'nwm.{issue_date}/{configuration}/nwm.t{issue_time}'
+    )
+
+    # Return blob names
+    return [b.name for b in list(blobs) if must_contain in b.name]
+
+
+def list_blobs_assim(
+        configuration: str,
+        issue_date: str,
+        must_contain: str = 'tm00'
+) -> list:
+    """List available blobs with provided parameters.
+
+    Based largely on OWP HydroTools.
+
+    Parameters
+    ----------
+    configuration : str, required
+        No validation
+    issue_date : str, required
+        Issue date in 
+        YYYYmmdd format.
+    must_contain : str, optional, default 'tm00
+        Optional substring found in each blob name.
+
+    Returns
+    -------
+    blob_list : list
+        A list of blob names that satisfy the criteria set by the
+        parameters.
+    """
+
+    # Connect to bucket with anonymous client
+    client = storage.Client.create_anonymous_client()
+    bucket = client.bucket(BUCKET)
+
+    # Get list of blobs
+    blobs = client.list_blobs(
+        bucket,
+        prefix=f'nwm.{issue_date}/{configuration}/'
     )
 
     # Return blob names
@@ -242,8 +282,7 @@ def add_zonalstats_to_gdf_weights(
     return gdf_map
 
 
-# @profile
-def calculate_map(
+def calculate_map_forcing(
     blob_name: str,
     use_cache: bool = True
 ) -> pd.DataFrame:
@@ -297,6 +336,63 @@ def calculate_map(
 
     return df
 
+
+def calculate_map_assim(
+    blob_name: str,
+    use_cache: bool = True
+) -> pd.DataFrame:
+    """Calculate the MAP for a single NetCDF file (i.e. one timestep).
+    
+    ToDo: add way to filter which catchments are calculated
+    """
+    print(f"Processing {blob_name}")
+
+    # Get some metainfo from blob_name
+    path_split = blob_name.split("/")
+    issue_datetime = datetime.strptime(
+        path_split[0].split(".")[1] + path_split[2].split(".")[1], 
+        "%Y%m%dt%Hz"
+    )
+    offset_hours = int(path_split[2].split(".")[4][2:])  # tm00
+    value_time = issue_datetime - timedelta(hours=offset_hours)
+    configuration = path_split[1]
+
+    # Get xr.Dataset/xr.DataArray
+    ds = get_dataset(blob_name, use_cache)
+    src = ds["RAINRATE"]
+
+    # Pull out some attributes
+    measurement_unit = src.attrs["units"]
+    variable_name = src.attrs["standard_name"]
+
+    # Calculate MAP
+    df = calc_zonal_stats_weights(src, WEIGHTS_FILE_NAME)
+    
+    # Set metainfo for MAP
+    # df["reference_time"] = 0
+    df["value_time"] = value_time
+    df["configuration"] = configuration
+    df["measurement_unit"] = measurement_unit
+    df["variable_name"] = variable_name
+
+    # Reduce memory foot print
+    # df["reference_time"] = df["reference_time"].astype("category")
+    df['configuration'] = df['configuration'].astype("category")
+    df['measurement_unit'] = df['measurement_unit'].astype("category")
+    df['variable_name'] = df['variable_name'].astype("category")
+    df["catchment_id"] = df["catchment_id"].astype("category")
+
+    # print(df.info(verbose=True, memory_usage='deep'))
+    # print(df.memory_usage(index=True, deep=True))
+    # print(df)
+
+    # This should not be needed, but without memory usage grows
+    del ds
+    gc.collect()
+
+    return df
+
+
 def main_1():
     """Geenerate the weights file."""
     # Not 100% sure how best to manage this yet.  Hope a pattern will emerge.
@@ -310,7 +406,7 @@ def main_1():
 
 @profile
 def main_2():
-    """Calculate MAP"""
+    """Calculate MAP Forcing"""
 
     # Setup some criteria
     ingest_days = 1
@@ -326,7 +422,7 @@ def main_2():
 
         print(f"Start download of {ref_time_str}")
 
-        blob_list = list_blobs(
+        blob_list = list_blobs_forcing(
             configuration = "forcing_medium_range",
             reference_time = ref_time_str,
             must_contain = "forcing"
@@ -345,7 +441,7 @@ def main_2():
         # Retrieve data using multiple processes
         with ProcessPoolExecutor(max_workers=max_processes) as executor:
             dfs = executor.map(
-                calculate_map,
+                calculate_map_forcing,
                 blob_list,
                 chunksize=chunksize
             )
@@ -354,7 +450,58 @@ def main_2():
         df = pd.concat(dfs)
 
         # Save as parquet file
-        df.to_parquet(f"map/data/{ref_time_str}.parquet")
+        df.to_parquet(f"map/data/forcing_medium_range/{ref_time_str}.parquet")
+
+        # Print out some DataFrame stats
+        print(df.info(verbose=True, memory_usage='deep'))
+        print(df.memory_usage(index=True, deep=True))
+
+
+
+@profile
+def main_3():
+    """Calculate MAP Assim"""
+
+    # Setup some criteria
+    start_dt = datetime(2022, 10, 1)
+    number_of_days = 11
+
+    # Loop though forecasts, fetch and insert
+    for f in range(number_of_days):
+        issue_date = start_dt + timedelta(days=f)
+        issue_date_str = issue_date.strftime("%Y%m%d")
+
+        print(f"Start download of {issue_date_str}")
+
+        blob_list = list_blobs_assim(
+            configuration = "forcing_analysis_assim",
+            issue_date = issue_date_str,
+            must_contain = "tm00.conus"
+        )
+
+        # This can be used to run serial
+        # dfs = []
+        # for blob_name in blob_list:
+        #     df = calculate_map(blob_name, use_cache=True)
+        #     dfs.append(df)
+
+        # Set max processes
+        max_processes = max((os.cpu_count() - 2), 1)
+        chunksize = (len(blob_list) // max_processes) + 1
+
+        # Retrieve data using multiple processes
+        with ProcessPoolExecutor(max_workers=max_processes) as executor:
+            dfs = executor.map(
+                calculate_map_assim,
+                blob_list,
+                chunksize=chunksize
+            )
+        
+        # Join all timesteps into single pd.DataFrame
+        df = pd.concat(dfs)
+
+        # Save as parquet file
+        df.to_parquet(f"map/data/forcing_analysis_assim/{issue_date_str}.parquet")
 
         # Print out some DataFrame stats
         print(df.info(verbose=True, memory_usage='deep'))
@@ -364,4 +511,5 @@ def main_2():
 
 if __name__ == "__main__":
     # main_1()
-    main_2()
+    # main_2()
+    main_3()
