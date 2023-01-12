@@ -26,20 +26,19 @@ def get_metrics():
             {
                 "column": "nwm_feature_id",
                 "operator": "in",
-                # "value": "(17003262)"
                 "value": "(6731199,2441678,14586327,8573705,2567762,41002752,8268521,41026212,4709060,20957306)"
             }
         ]
     )
 
     query_2 = queries.calculate_metrics(
-        group_by=["nwm_feature_id", "geom", "configuration"],
-        order_by=["nwm_feature_id"],
+        group_by=["reference_time", "nwm_feature_id", "value_time",],
+        order_by=["nwm_feature_id", "value_time"],
         filters=[
             {
-                "column": "configuration",
+                "column": "nwm_feature_id",
                 "operator": "=",
-                "value": "'medium_range_mem1'"
+                "value": "17003262"
             }
         ]
     )
@@ -54,10 +53,11 @@ def get_metrics():
         ]
     )
 
-    df = pd.read_sql(query_1, config.CONNECTION)
-    # print(df.info(memory_usage="deep"))
-    # print(df)
-    print(df[["reference_time","nwm_feature_id", "bias", "max_forecast_delta"]])
+    df = pd.read_sql(query_3, config.CONNECTION)
+    print(df.info(memory_usage="deep"))
+    print(df.head())
+    df.head().to_csv("query_3_head.csv")
+    # print(df[["reference_time","nwm_feature_id", "bias", "max_forecast_delta"]])
 
     # df = pd.read_sql(query_3, config.CONNECTION)
     # print(df.info(memory_usage="deep"))
@@ -65,8 +65,13 @@ def get_metrics():
     # print(df[["reference_time","nwm_feature_id", "value_time", "forecast_value", "observed_value"]])
 
     # sdf = df.loc[df["reference_time"] == "2022-10-01 00:00:00"] 
-    df.plot.scatter(legend=False, x="bias", y="max_forecast_delta")
-    plt.savefig("test.png")
+    # df.plot.scatter(legend=False, x="bias", y="max_forecast_delta")
+    # plt.savefig("test.png")
+
+    # for k,v in df.groupby("reference_time"):
+    #     plt.plot(v["value_time"], v["bias"])
+        
+    # plt.savefig(f"test.png")
 
     # with psycopg2.connect(config.CONNECTION) as conn:
     #     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:

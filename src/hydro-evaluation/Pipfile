@@ -18,6 +18,9 @@ matplotlib = "*"
 pyarrow = "*"
 duckdb = "*"
 rioxarray = "*"
+geopandas = "*"
+cftime = "*"
+rasterstats = "*"
 
 [dev-packages]
 memory-profiler = "*"
