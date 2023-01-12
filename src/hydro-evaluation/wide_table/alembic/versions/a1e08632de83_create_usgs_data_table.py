@@ -14,9 +14,9 @@ Schema based on hydrotools pd.DataFrame:
 5   qualifiers        category      
 6   series            category 
 """
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = 'a1e08632de83'
