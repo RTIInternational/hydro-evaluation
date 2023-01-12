@@ -1,7 +1,9 @@
-from wide_table.utils import profile, insert_bulk
-import wide_table.utils as utils
-from hydrotools.nwis_client.iv import IVDataService
 from datetime import datetime, timedelta
+
+from hydrotools.nwis_client.iv import IVDataService
+
+import wide_table.utils as utils
+from wide_table.utils import insert_bulk, profile
 
 
 @profile

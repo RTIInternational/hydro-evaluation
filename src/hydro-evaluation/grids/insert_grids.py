@@ -1,21 +1,16 @@
-import psycopg2
-import subprocess 
-import sys, os
-import xarray as xr
-import rioxarray
-from google.cloud import storage
-from io import BytesIO
 import os
 import subprocess
-import wide_table.utils as utils
-import wide_table.config as config
-from wide_table.utils import profile
-from datetime import datetime, timedelta
 from concurrent.futures import ProcessPoolExecutor
+from datetime import datetime, timedelta
+from io import BytesIO
 
+import xarray as xr
+from google.cloud import storage
+
+import grids.config as config
+from grids.utils import get_cache_dir, profile
 
 BUCKET = "national-water-model"
-GRID_DIR = os.path.join("grids", "data")
 
 
 def list_blobs(
@@ -87,6 +82,7 @@ def get_blob(blob_name: str) -> bytes:
 
 def get_dataset(
         blob_name: str,
+        use_cache: bool = True
         ) -> xr.Dataset:
         """Retrieve a blob from the data service as xarray.Dataset.
 
@@ -94,8 +90,12 @@ def get_dataset(
 
         Parameters
         ----------
-        blob_name : str, required
+        blob_name: str, required
             Name of blob to retrieve.
+        use_cacahe: bool, default True
+            If cache should be used.  
+            If True, checks to see if file is in cache, and 
+            if fetched from remote will save to cache.
 
         Returns
         -------
@@ -103,71 +103,106 @@ def get_dataset(
             The data stored in the blob.
         
         """
-        # Get raw bytes
-        raw_bytes = get_blob(blob_name)
+        nc_filepath = os.path.join(
+            get_cache_dir(),
+            _format_nc_name(blob_name)
+        )
 
-        # Create Dataset
-        ds = xr.load_dataset(
-            BytesIO(raw_bytes),
-            engine='h5netcdf',
-            mask_and_scale=False,
-            decode_coords="all"
-            )
+        # If the file exists and use_cache = True
+        if os.path.exists(nc_filepath) and use_cache:
 
-        return ds
+            # Get dataset from cache
+            ds = xr.load_dataset(
+                nc_filepath,
+                engine='h5netcdf',
+                mask_and_scale=False,
+                decode_coords="all"
+                )
+
+            return ds
+        
+        else:
+
+            # Get raw bytes
+            raw_bytes = get_blob(blob_name)
+
+            # Create Dataset
+            ds = xr.load_dataset(
+                BytesIO(raw_bytes),
+                engine='h5netcdf',
+                mask_and_scale=False,
+                decode_coords="all"
+                )
+
+            if use_cache:
+                # Subset and cache
+                ds["RAINRATE"].to_netcdf(
+                    nc_filepath,
+                    engine='h5netcdf',
+                )
+
+            return ds
 
 
-def ds_to_tiff(ds: xr.Dataset, variable: str, filepath: str):
-    """Saves xr.Dataset to geotiff"""
+def ds_to_tiff(ds: xr.Dataset, variable: str, blob_name: str) -> str:
+    """Saves xr.Dataset to geotiff."""
+
+    filepath = os.path.join(
+        get_cache_dir(),
+        _format_tiff_name(blob_name)
+    )
 
     ds[variable].rio.to_raster(
         filepath,
         compress='LZW'
     )
 
+    return filepath
+
+
+def delete_tiff(filepath: str):
+    if os.path.exists(filepath):
+        os.remove(filepath)
+    else:
+        print(f"{filepath} does not exist")
+
 
 def _format_tiff_name(blob_name: str):
     return blob_name.replace("/", ".").replace(".nc", ".tiff")
 
 
-def load_raster_to_db(filepath: str):
+def _format_nc_name(blob_name: str):
+    return blob_name.replace("/", ".")
 
-    # Set pg password environment variable - others can be included in the statement
-    # os.environ['PGPASSWORD'] = DB_PASSWORD
+
+def load_raster_to_db(filepath: str, table_name: str):
+    """Loads raster to database table using PostGIS raster2pgsql utility."""
 
     # Build command string
-    # cmd = f'raster2pgsql -C -F -t auto {filepath}/*.tiff grids.forcing_medium_range | psql -U {DB_USER} -d {DB_NAME} -h {DB_HOST} -p 5432'
-    cmd = f'raster2pgsql -F -a -t auto {filepath} grids.forcing_medium_range | psql {config.CONNECTION}'
-
-    # Execute
-    subprocess.call(cmd, shell=True)
-
-
-def create_raster_table(filepath: str):
-
-    cmd = f'raster2pgsql -C -p -t auto {filepath} grids.forcing_medium_range | psql {config.CONNECTION}'
+    cmd = f'raster2pgsql -F -a -t "288x256" {filepath} {table_name} | psql {config.CONNECTION}'
 
     # Execute
     subprocess.call(cmd, shell=True)
 
 
 def get_load_raster(blob_name: str, use_cache: bool = True):
+    """Get and load the raster to the DB"""
     print(f"Fetching {blob_name}")
-    filepath = os.path.join(GRID_DIR, _format_tiff_name(blob_name))
-    if not os.path.exists(filepath) and use_cache:
-        ds = get_dataset(blob_name)
-        ds_to_tiff(ds, "RAINRATE", filepath)
-    load_raster_to_db(filepath)
+    ds = get_dataset(blob_name, use_cache)
+    tiff_filepath = ds_to_tiff(ds, "RAINRATE", blob_name)
+    load_raster_to_db(tiff_filepath, "forcing_medium_range")
+    delete_tiff(tiff_filepath)
 
 
 @profile
 def main():
 
     # Setup some criteria
-    ingest_days = 10
-    start_dt = datetime(2022, 10, 1) # First one is at 00Z in date
-    td = timedelta(hours=6)
-    number_of_forecasts = ingest_days * 4
+    ingest_days = 1
+    forecast_interval_hrs = 6
+    start_dt = datetime(2022, 10, 2) # First one is at 00Z in date
+    td = timedelta(hours=forecast_interval_hrs)
+    number_of_forecasts = 1  # int(ingest_days * 24/forecast_interval_hrs)
 
     # Loop though forecasts, fetch and insert
     for f in range(number_of_forecasts):
@@ -180,7 +215,7 @@ def main():
             configuration = "forcing_medium_range",
             reference_time = ref_time_str,
             must_contain = "forcing"
-        )
+        )[:1]
 
         # for blob_name in blob_list:
         #     get_load_raster(blob_name)

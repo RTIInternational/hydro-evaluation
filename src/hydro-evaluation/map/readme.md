@@ -1,0 +1,1 @@
+MAP = Mean Areal Precipitation
