@@ -35,6 +35,9 @@ def shape_to_gdf(filepath: str) -> gpd.GeoDataFrame:
     gdf = gpd.GeoDataFrame.from_file(filepath)
     return gdf
 
+def pgsql_to_gdf(filepath: str) -> gpd.GeoDataFrame:
+    gdf = gpd.GeoDataFrame.from_postgis("SELECT * FROM public.wbdhu10_conus;")
+    return gdf
 
 def list_blobs_forcing(
         configuration: str,
@@ -501,6 +504,9 @@ def main_3():
         print(df.info(verbose=True, memory_usage='deep'))
         print(df.memory_usage(index=True, deep=True))
         # print(df)
+
+        del df
+        gc.collect()
 
 
 if __name__ == "__main__":
