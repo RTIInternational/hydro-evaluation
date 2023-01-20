@@ -1,14 +1,17 @@
-import time
-from functools import wraps
 from io import StringIO
+from typing import List
+from functools import wraps
 from pathlib import Path
 from typing import List
 
 import geopandas as gpd
+import inspect
 import numpy as np
+import os
 import pandas as pd
 import psycopg2
 import psycopg2.extras
+import time
 import xarray as xr
 
 import wide_table.config as config
@@ -88,12 +91,15 @@ def insert_bulk(df: pd.DataFrame, table_name: str, columns: List[str]):
     conn.close()
 
 
-def get_xwalk() -> pd.DataFrame:
-    file = Path(__file__).resolve().parent.parent / \
-        "data/RouteLink_CONUS_NWMv2.1.6.csv",
-
+def get_xwalk(file=None) -> pd.DataFrame:
+    if file is None:
+        file = str(Path(
+                        inspect.getfile(inspect.currentframe())
+                        ).resolve().parent.parent
+                  ) + '/data/RouteLink_CONUS_NWMv2.1.6.csv'
+        
     df = pd.read_csv(
-        file[0],
+        file,
         dtype={
             "nwm_feature_id": int,
             "usgs_site_code": str,
