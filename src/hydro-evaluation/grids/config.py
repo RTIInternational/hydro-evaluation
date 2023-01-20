@@ -4,7 +4,14 @@ import os
 
 CONNECTION = "postgresql://postgres:postgrespassword@localhost:5432/postgres"
 # TEMP_DIR = tempfile.gettempdir()
-NWM_CACHE = os.path.join("/home", "matt", "cache")
+CACHE_DIR = os.path.join("/home", "matt", "cache")
+NWM_CACHE_DIR = os.path.join(CACHE_DIR, "nwm")
+GEO_CACHE_DIR = os.path.join(CACHE_DIR, "geo")
+PARQUET_CACHE_DIR = os.path.join(CACHE_DIR, "parquet")
+MEDIUM_RANGE_PARQUET = os.path.join(PARQUET_CACHE_DIR, "forcing_medium_range")
+SHP_FILEPATH = os.path.join(GEO_CACHE_DIR, "wbdhu10_conus.shp")
+PARQUET_FILEPATH = os.path.join(GEO_CACHE_DIR, "wbdhu10_conus.parquet")
+MEDIUM_RANGE_WEIGHTS_FILEPATH = os.path.join(GEO_CACHE_DIR, "wbdhu10_medium_range_weights.pkl")
 
 # WKT strings extracted from NWM grids
 CONUS_NWM_WKT = 'PROJCS["Lambert_Conformal_Conic",GEOGCS["GCS_Sphere",DATUM["D_Sphere",SPHEROID["Sphere",6370000.0,0.0]], \

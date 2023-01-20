@@ -22,6 +22,7 @@ geopandas = "*"
 cftime = "*"
 rasterstats = "*"
 dash = "*"
+dask = {extras = ["complete"], version = "*"}
 
 [dev-packages]
 memory-profiler = "*"
