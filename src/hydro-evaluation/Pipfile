@@ -21,6 +21,7 @@ rioxarray = "*"
 geopandas = "*"
 cftime = "*"
 rasterstats = "*"
+dash = "*"
 
 [dev-packages]
 memory-profiler = "*"

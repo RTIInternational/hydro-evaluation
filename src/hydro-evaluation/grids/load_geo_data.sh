@@ -16,3 +16,7 @@ psql -U postgres -h localhost -f rast.sql
 shp2pgsql -d -D -I /home/matt/huc10_lcc.shp public.huc10 > shp.sql
 psql -U postgres -h localhost -f shp.sql 
 
+shp2pgsql -d -D -I /home/matt/wbdhu10_conus.shp public.wbdhu10_conus > shp.sql
+psql -U postgres -h localhost -f shp.sql 
+
+
