@@ -3,6 +3,7 @@ import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
 
+
 # cursor = duckdb.connect()
 # data = cursor.execute("""
 #     SELECT catchment_id, value_time, value FROM 
@@ -44,7 +45,7 @@ df = duckdb.query("""
         read_parquet('map/data/forcing_analysis_assim/*.parquet') observed 
     ON forecast.catchment_id = observed.catchment_id AND forecast.value_time = observed.value_time
     WHERE 
-        reference_time = '2022-10-01T00:00:00' AND forecast.value_time < '2022-10-02'
+        reference_time = '2022-10-01T00:00:00' --AND forecast.value_time < '2022-10-02'
     --GROUP BY 
         --forecast.catchment_id, forecast.reference_time
         ;
@@ -56,10 +57,13 @@ gdf = gpd.GeoDataFrame.from_file(shp_filepath)
 
 gdf_map = gdf.merge(df, left_on="huc10", right_on="catchment_id")
 
+gdf_map = gdf_map.loc[gdf_map["catchment_id"].str.startswith("03")]
+
 for k,v in gdf_map.groupby("value_time"):
     # plt.plot(v["value_time"], v["bias"])
     v.plot("delta", legend=True)
     plt.savefig(f"map/{k}.png")
+    plt.close()
 
 #-------------------------------------------------------------------
 # df = duckdb.query("""
@@ -80,3 +84,5 @@ for k,v in gdf_map.groupby("value_time"):
 #     # plt.plot(v["value_time"], v["bias"])
 #     v.plot("sum", legend=True)
 #     plt.savefig(f"map/{k}.png")
+
+#------------------------------------------------------------------
