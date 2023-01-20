@@ -1,31 +1,27 @@
-from rasterstats import zonal_stats
-import geopandas as gpd
-import xarray as xr
-import rasterio
-import geopandas as gpd
-import pandas as pd
-import matplotlib.pyplot as plt
-from rasterio.features import rasterize
-import numpy as np
-import fiona
-import pickle
 import gc
-
 import os
+import pickle
 import subprocess
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timedelta
 from io import BytesIO
 
+import fiona
+import geopandas as gpd
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import rasterio
+import xarray as xr
 # import xarray as xr
 from google.cloud import storage
-
-import grids.config as config
-from grids.utils import get_cache_dir, profile
+from rasterio.features import rasterize
+from rasterio.io import MemoryFile
 # from memory_profiler import profile
 from rasterstats import zonal_stats
-from rasterio.io import MemoryFile
 
+import grids.config as config
+from grids.utils import get_cache_dir, make_parent_dir, profile
 
 BUCKET = "national-water-model"
 WEIGHTS_FILE_NAME = "wbdhu10_forcing_medium_range.pkl"
@@ -173,11 +169,8 @@ def get_dataset(
         The data stored in the blob.
 
     """
-    nc_filepath = os.path.join(
-        get_cache_dir(),
-        _format_nc_name(blob_name)
-    )
-    # print(f"file path: {nc_filepath}")
+    nc_filepath = os.path.join(get_cache_dir(), blob_name)
+    make_parent_dir(nc_filepath)
 
     # If the file exists and use_cache = True
     if os.path.exists(nc_filepath) and use_cache:
@@ -314,7 +307,7 @@ def calculate_map_forcing(
     variable_name = src.attrs["standard_name"]
 
     # Calculate MAP
-    df = calc_zonal_stats_weights(src, WEIGHTS_FILE_NAME)
+    df = calc_zonal_stats_weights(src, config.MEDIUM_RANGE_WEIGHTS_FILEPATH)
     
     # Set metainfo for MAP
     df["reference_time"] = reference_time
@@ -399,12 +392,12 @@ def calculate_map_assim(
 def main_1():
     """Geenerate the weights file."""
     # Not 100% sure how best to manage this yet.  Hope a pattern will emerge.
-    shp_filepath = "/home/matt/wbdhu10_conus.shp"
-    huc10_gdf = shape_to_gdf(shp_filepath)
+    huc10_gdf = shape_to_gdf(config.SHP_FILEPATH)
+    huc10_gdf.to_parquet(config.PARQUET_FILEPATH)
     template_blob_name = "nwm.20221001/forcing_medium_range/nwm.t00z.medium_range.forcing.f001.conus.nc"
     ds = get_dataset(template_blob_name, use_cache=True)
     src = ds["RAINRATE"]
-    generate_weights_file(huc10_gdf, src, WEIGHTS_FILE_NAME, crosswalk_dict_key="huc10")
+    generate_weights_file(huc10_gdf, src, config.MEDIUM_RANGE_WEIGHTS_FILEPATH, crosswalk_dict_key="huc10")
 
 
 @profile
@@ -414,9 +407,9 @@ def main_2():
     # Setup some criteria
     ingest_days = 1
     forecast_interval_hrs = 6
-    start_dt = datetime(2022, 10, 1) # First one is at 00Z in date
+    start_dt = datetime(2023, 1, 1) # First one is at 00Z in date
     td = timedelta(hours=forecast_interval_hrs)
-    number_of_forecasts = 2  # int(ingest_days * 24/forecast_interval_hrs)
+    number_of_forecasts = 1 # int(ingest_days * 24/forecast_interval_hrs)
 
     # Loop though forecasts, fetch and insert
     for f in range(number_of_forecasts):
@@ -453,12 +446,13 @@ def main_2():
         df = pd.concat(dfs)
 
         # Save as parquet file
-        df.to_parquet(f"map/data/forcing_medium_range/{ref_time_str}.parquet")
+        parquet_filepath = os.path.join(config.MEDIUM_RANGE_PARQUET, f"{ref_time_str}.parquet")
+        make_parent_dir(parquet_filepath)
+        df.to_parquet(parquet_filepath)
 
         # Print out some DataFrame stats
         print(df.info(verbose=True, memory_usage='deep'))
         print(df.memory_usage(index=True, deep=True))
-
 
 
 @profile
@@ -517,5 +511,5 @@ def main_3():
 
 if __name__ == "__main__":
     # main_1()
-    # main_2()
-    main_3()
+    main_2()
+    # main_3()

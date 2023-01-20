@@ -1,20 +1,23 @@
 import os
 import time
 from functools import wraps
+from pathlib import Path
 
 import grids.config as config
 
 
 def get_cache_dir(create: bool = True):
 
-    if not os.path.exists(config.NWM_CACHE) and create:
-        os.mkdir(config.NWM_CACHE)
+    if not os.path.exists(config.NWM_CACHE_DIR) and create:
+        os.mkdir(config.NWM_CACHE_DIR)
 
-    if not os.path.exists(config.NWM_CACHE):
+    if not os.path.exists(config.NWM_CACHE_DIR):
         raise NotADirectoryError
 
-    return config.NWM_CACHE
+    return config.NWM_CACHE_DIR
 
+def make_parent_dir(filepath):
+    Path(filepath).parent.mkdir(parents=True, exist_ok=True)
 
 def profile(fn):
     @wraps(fn)
