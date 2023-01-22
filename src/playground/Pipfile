@@ -23,6 +23,10 @@ cftime = "*"
 rasterstats = "*"
 dash = "*"
 dask = {extras = ["complete"], version = "*"}
+notebook = "*"
+gcsfs = "*"
+fsspec = {extras = ["gcs"], version = "*"}
+hdfs = "*"
 
 [dev-packages]
 memory-profiler = "*"
