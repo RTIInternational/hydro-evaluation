@@ -1,0 +1,16 @@
+version: "3.7"
+
+services:
+    dashboard:
+        environment:
+            - PORT=8085
+            - HOST=0.0.0.0
+            - DEBUG=True
+        build:
+            context: .
+        image: hydro_dash
+        volumes:
+            - ./src:/code
+        command: ["python", "app.py"]
+        ports:
+            - "8085:8085"
