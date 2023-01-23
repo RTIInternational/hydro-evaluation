@@ -1,0 +1,13 @@
+version: "3.7"
+
+services:
+    dashboard:
+        environment:
+            - PORT=8085
+            - HOST=0.0.0.0
+            - DEBUG=False
+        image: hydro_dash:latest
+        command: ["gunicorn", "--config", "gunicorn_config.py", "app:server"]
+        ports:
+            - "8085:8085"
+        restart: always
