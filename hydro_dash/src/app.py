@@ -33,7 +33,7 @@ app = dash.Dash(
         }
     ],
     suppress_callback_exceptions=True,
-    title='Dash app structure'
+    title='hydro_dash app structure'
 )
 
 server.config.update(SECRET_KEY=os.getenv('SECRET_KEY'))
