@@ -1,0 +1,36 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+pandas = "*"
+numpy = "*"
+hydrotools = "*"
+ipython = "*"
+alembic = "*"
+sqlalchemy = "*"
+autopep8 = "*"
+sqlalchemy-utils = "*"
+psycopg2 = "*"
+prefect = "*"
+matplotlib = "*"
+pyarrow = "*"
+duckdb = "*"
+rioxarray = "*"
+geopandas = "*"
+cftime = "*"
+rasterstats = "*"
+dash = "*"
+dask = {extras = ["complete"], version = "*"}
+notebook = "*"
+gcsfs = "*"
+fsspec = {extras = ["gcs"], version = "*"}
+hdfs = "*"
+
+[dev-packages]
+memory-profiler = "*"
+black = "*"
+
+[requires]
+python_version = "3.10"
