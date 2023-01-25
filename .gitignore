@@ -128,5 +128,5 @@ dmypy.json
 # Pyre type checker
 .pyre/
 # DuckDB
-.duckdb
-.duckdb.wal
+*.duckdb
+*.duckdb.wal
