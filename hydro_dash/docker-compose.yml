@@ -6,11 +6,14 @@ services:
             - PORT=8085
             - HOST=0.0.0.0
             - DEBUG=True
+            - DEV_TOOLS_PROPS_CHECK=False
+            - DATA_DIR=/data
         build:
             context: .
         image: hydro_dash
         volumes:
             - ./src:/code
+            - ./data:/data
         command: ["python", "app.py"]
         ports:
             - "8085:8085"
