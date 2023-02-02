@@ -238,7 +238,7 @@ def calculate_map_forcing(
 
     ToDo: add way to filter which catchments are calculated
     """
-    # print(f"Processing {blob_name}")
+    # print(f"Processing {blob_name}, {datetime.now()}")
 
     # Get some metainfo from blob_name
     path_split = blob_name.split("/")
@@ -279,6 +279,7 @@ def calculate_map_forcing(
     # print(df)
 
     # This should not be needed, but without memory usage grows
+    ds.close()
     del ds
     gc.collect()
 
@@ -336,6 +337,7 @@ def calculate_map_assim(
     # print(df)
 
     # This should not be needed, but without memory usage grows
+    ds.close()
     del ds
     gc.collect()
 
