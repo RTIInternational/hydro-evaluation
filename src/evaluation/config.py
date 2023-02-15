@@ -2,10 +2,10 @@ import os
 from pathlib import Path
 
 
-CACHE_DIR = Path("/home", "matt", "cache")
+CACHE_DIR = Path("/Users/ctownsend/projects/hydro-evaluation/src/hydro_dash/data/", "cache")
 NWM_CACHE_DIR = os.path.join(CACHE_DIR, "nwm")
 USGS_CACHE_DIR = os.path.join(CACHE_DIR, "usgs")
-GEO_CACHE_DIR = os.path.join(CACHE_DIR, "geo")
+GEO_CACHE_DIR = os.path.join(CACHE_DIR, "parquet")
 
 NWM_CACHE_H5 = os.path.join(NWM_CACHE_DIR, "gcp_client.h5")
 

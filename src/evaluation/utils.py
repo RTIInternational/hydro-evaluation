@@ -13,6 +13,8 @@ from functools import wraps
 from datetime import datetime, timedelta
 
 import geopandas as gpd
+import spatialpandas as sp
+from spatialpandas.io import read_parquet
 
 import numpy as np
 import pandas as pd
@@ -65,6 +67,11 @@ def gdf_to_parquet(gdf: gpd.GeoDataFrame, parquet_filepath: str):
 def parquet_to_gdf(parquet_filepath: str) -> gpd.GeoDataFrame:
     gdf = gpd.read_parquet(parquet_filepath)
     return gdf
+
+
+def parquet_to_sdf(parquet_filepath: str) -> sp.GeoDataFrame:
+    sdf = read_parquet(parquet_filepath)
+    return sdf
 
 
 def get_usgs_gages():
