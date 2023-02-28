@@ -35,7 +35,7 @@ def nwm_to_parquet(df: pd.DataFrame, ref_time_str):
     df["lead_time"] = df["value_time"] - df["reference_time"]
 
     # Save as parquet file
-    parquet_filepath = os.path.join(config.MEDIUM_RANGE_PARQUET, f"{ref_time_str}.parquet")
+    parquet_filepath = os.path.join(config.MEDIUM_RANGE_1_PARQUET, f"{ref_time_str}.parquet")
     utils.make_parent_dir(parquet_filepath)
     df.to_parquet(parquet_filepath)
     
