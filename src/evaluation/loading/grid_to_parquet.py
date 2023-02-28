@@ -190,11 +190,8 @@ def calc_zonal_stats_weights(
 ) -> pd.DataFrame:
     """Calculates zonal stats"""
 
-    # Open weights dict from pickle
-    # This could probably be done once and passed as a reference.
-    with open(weights_filepath, 'rb') as f:
-        crosswalk_dict = pickle.load(f)
-
+    crosswalk_dict = utils.read_weights_file(weights_filepath)
+                            
     r_array = src.values[0]
     r_array[r_array == src.rio.nodata] = np.nan
 
@@ -238,7 +235,7 @@ def calculate_map_forcing(
 
     ToDo: add way to filter which catchments are calculated
     """
-    # print(f"Processing {blob_name}")
+    # print(f"Processing {blob_name}, {datetime.now()}")
 
     # Get some metainfo from blob_name
     path_split = blob_name.split("/")
@@ -279,6 +276,7 @@ def calculate_map_forcing(
     # print(df)
 
     # This should not be needed, but without memory usage grows
+    ds.close()
     del ds
     gc.collect()
 
@@ -336,6 +334,7 @@ def calculate_map_assim(
     # print(df)
 
     # This should not be needed, but without memory usage grows
+    ds.close()
     del ds
     gc.collect()
 
