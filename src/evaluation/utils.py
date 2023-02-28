@@ -77,3 +77,27 @@ def parquet_to_sdf(parquet_filepath: str) -> sp.GeoDataFrame:
 def get_usgs_gages():
     gdf = parquet_to_gdf(config.ROUTE_LINK_PARQUET)
     return gdf.loc[gdf["gage_id"].str.strip() != ""].loc[~gdf["gage_id"].str.contains("[a-zA-Z]").fillna(False)]
+
+def np_to_list(t):
+    return [a.tolist() for a in t]
+
+
+def list_to_np(l):
+    return tuple([np.array(a) for a in l])
+
+
+def save_weights_dict(weights: dict, filepath: str):
+    # To json
+    j = json.dumps({k: np_to_list(v) for k, v in crosswalk_dict.items()})
+    
+    # Write to disk
+    with open(filepath, "w") as f:
+        f.write(j)
+
+def read_weights_file(filepath: str) -> dict:
+    with open(filepath, "r") as f:
+        j = f.read()
+    
+    # Back to dict
+    a = {k: list_to_np(v) for k, v in json.loads(j).items()}
+    return a

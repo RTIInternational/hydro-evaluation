@@ -37,8 +37,7 @@ def generate_weights_file(
         else:
             crosswalk_dict[index] = np.where(geom_rasterize == 1)
 
-    with open(weights_filepath, 'wb') as f:
-        pickle.dump(crosswalk_dict, f)
+    utils.save_weights_dict(crosswalk_dict, weights_filepath)
 
 
 def main():
