@@ -9,7 +9,7 @@ def format_filters(filters: List[dict]) -> List[str]:
     """
     filter_strs = []
     for f in filters:
-        print(f)
+        # print(f)
         if type(f["value"]) == str:
             filter_strs.append(f"""{f["column"]} {f["operator"]} '{f["value"]}'""")
         else:
