@@ -190,11 +190,8 @@ def calc_zonal_stats_weights(
 ) -> pd.DataFrame:
     """Calculates zonal stats"""
 
-    # Open weights dict from pickle
-    # This could probably be done once and passed as a reference.
-    with open(weights_filepath, 'rb') as f:
-        crosswalk_dict = pickle.load(f)
-
+    crosswalk_dict = utils.read_weights_file(weights_filepath)
+                            
     r_array = src.values[0]
     r_array[r_array == src.rio.nodata] = np.nan
 
