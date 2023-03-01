@@ -5,7 +5,7 @@ from pathlib import Path
 CACHE_DIR = Path("/home", "jovyan", "cache")
 NWM_CACHE_DIR = os.path.join(CACHE_DIR, "nwm")
 USGS_CACHE_DIR = os.path.join(CACHE_DIR, "usgs")
-GEO_CACHE_DIR = os.path.join(CACHE_DIR, "parquet")
+GEO_CACHE_DIR = os.path.join(CACHE_DIR, "geo")
 
 NWM_CACHE_H5 = os.path.join(NWM_CACHE_DIR, "gcp_client.h5")
 
