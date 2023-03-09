@@ -6,4 +6,6 @@ Most of the code in this repo, particularly the Jupyter Notebooks, was written a
 
 Git LFS is used for large files (*.csv, *.nc, etc.)
 
-`nbstripoutput` is configured to strip output from notebooks to keep the size down and make diffing files easier.
+`nbstripoutput` is configured to strip output from notebooks to keep the size down and make diffing files easier.  See https://github.com/kynan/nbstripout.
+Note, after cloning, you must run `nbstripout --install` in the repo to install `nbstripoutput`.
+The configuraion is stored in the `.gitattributes` file, but the tool must be installed per repo.
