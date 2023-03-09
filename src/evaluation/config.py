@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 
-CACHE_DIR = Path("/home", "jovyan", "cache")
+CACHE_DIR = Path("/home", "jovyan", "shared", "rti-eval")
 NWM_CACHE_DIR = os.path.join(CACHE_DIR, "nwm")
 USGS_CACHE_DIR = os.path.join(CACHE_DIR, "usgs")
 GEO_CACHE_DIR = os.path.join(CACHE_DIR, "geo")
