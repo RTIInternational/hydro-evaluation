@@ -17,7 +17,7 @@ USGS_PARQUET = os.path.join(PARQUET_CACHE_DIR, "usgs")
 
 HUC10_SHP_FILEPATH = os.path.join(GEO_CACHE_DIR, "wbdhu10_conus.shp")
 HUC10_PARQUET_FILEPATH = os.path.join(GEO_CACHE_DIR, "wbdhu10_conus.parquet")
-HUC10_MEDIUM_RANGE_WEIGHTS_FILEPATH = os.path.join(GEO_CACHE_DIR, "wbdhu10_medium_range_weights.pkl")
+HUC10_MEDIUM_RANGE_WEIGHTS_FILEPATH = os.path.join(GEO_CACHE_DIR, "wbdhu10_medium_range_weights.pkl.json")
 
 ROUTE_LINK_FILE = os.path.join(NWM_CACHE_DIR, "RouteLink_CONUS.nc")
 ROUTE_LINK_PARQUET = os.path.join(NWM_CACHE_DIR, "route_link_conus.parquet")
