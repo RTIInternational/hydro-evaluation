@@ -27,6 +27,7 @@ notebook = "*"
 gcsfs = "*"
 fsspec = {extras = ["gcs"], version = "*"}
 hdfs = "*"
+nbstripout = "*"
 
 [dev-packages]
 memory-profiler = "*"

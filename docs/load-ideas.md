@@ -7,7 +7,7 @@ water-explore-evaluate-visualize-analyze
 
 CIROH evaluation and exploration tools (CHEET)
 
-weeva
+cheet
     load
         get_nwm_file_list(method: str) -> List[str]
             two approaches here - get file list from GCP bucket using filters, or generate using logic
@@ -35,14 +35,16 @@ weeva
 
     config.py - maybe don't need this
 
-
+# Cache Format
 studies
     study_1
         geo
         nwm
         parquet
+        zarr
     study_2
         geo
         nwm
         parquet
+        zarr
 

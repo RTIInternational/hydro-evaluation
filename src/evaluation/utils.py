@@ -75,9 +75,11 @@ def parquet_to_sdf(parquet_filepath: str) -> sp.GeoDataFrame:
     return sdf
 
 
-def get_usgs_gages():
+def get_usgs_gages() -> gpd.GeoDataFrame:
+    """Returns the USGS gages from the NWM RouteLink file"""
     gdf = parquet_to_gdf(config.ROUTE_LINK_PARQUET)
     return gdf.loc[gdf["gage_id"].str.strip() != ""].loc[~gdf["gage_id"].str.contains("[a-zA-Z]").fillna(False)]
+
 
 def np_to_list(t):
     return [a.tolist() for a in t]
@@ -89,11 +91,12 @@ def list_to_np(l):
 
 def save_weights_dict(weights: dict, filepath: str):
     # To json
-    j = json.dumps({k: np_to_list(v) for k, v in crosswalk_dict.items()})
+    j = json.dumps({k: np_to_list(v) for k, v in weights.items()})
     
     # Write to disk
     with open(filepath, "w") as f:
         f.write(j)
+
 
 def read_weights_file(filepath: str) -> dict:
     with open(filepath, "r") as f:
