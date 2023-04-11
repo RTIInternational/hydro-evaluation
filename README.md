@@ -36,6 +36,11 @@ You may need to install it with `conda install nbstripout` or similar depending 
 Install conda (miniconda3).  You may need to `eval "$(/home/[username]/miniconda3/bin/conda shell.bash hook)"` if you did not make it default when installing.
 `conda config --append channels conda-forge`
 `conda create --name evaluation --file package-list.txt`
-If you add any packages, run the following to update the package list:
+
+If the conda env already exists and needs to be updated:
+`conda env update --name evaluation --file package-list.txt --prune`
+
+If you add any packages, run the following to update the package list to commit to the repo:
 `conda list -e > package-list.txt`
+
 To add the `src/evaluation` path to the `PYTHONPATH`, from within the repo root (`hydro-evaluation`) run: `conda env config vars set PYTHONPATH=${PWD}/src/evaluation` 

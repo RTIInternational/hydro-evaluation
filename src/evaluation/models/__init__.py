@@ -1,1 +1,1 @@
-from models.models import MetricFilter
+from models.models import MetricFilter, MetricQuery

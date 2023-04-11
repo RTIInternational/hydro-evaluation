@@ -3,41 +3,107 @@ from datetime import datetime
 import config
 from collections.abc import Iterable
 from models import MetricFilter, MetricQuery
+import warnings
+
+SQL_DATETIME_STR_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
-
-def format_filter_value(MetricFilter) -> str:
-    if type(f["value"]) == str:
-        filter_strs.append(f"""{f["column"]} {f["operator"]} '{f["value"]}'""")
-    else:
-        filter_strs.append(f"""{f["column"]} {f["operator"]} {f["value"]}""")
+def get_datetime_list_string(values):
+    return [f"'{v.strftime(SQL_DATETIME_STR_FORMAT)}'" for v in values]
 
 
-
-ALLOWED_WHERE_COLUMNS = [""]
-ALLOWED_WHERE_OPERATORS = [""]
-
-def format_filters(filters: List[dict]) -> List[str]:
-    """Generate strings from filter dict.
+def format_iterable_value(
+        values: Iterable[Union[str, int, float, datetime]]
+    ) -> str:
+    """Returns an SQL formatted string from list of values. 
     
-    ToDo:  This is probably not robust enough.
+    Parameters
+    ----------
+    values : Iterable 
+        Contains values to be formatted as a string for SQL. Only one type of 
+        value (str, int, float, datetime) should be used. First value in list 
+        is used to determine value type. Values are not checked for type 
+        consistency.
+
+    Returns
+    -------
+    formatted_string : str
+
+    """
+
+    # string
+    if isinstance(values[0], str):
+        return f"""({",".join([f"'{v}'" for v in values])})"""
+    # int or float
+    elif (
+        isinstance(values[0], int) 
+        or isinstance(values[0], float)
+    ):
+        return f"""({",".join([f"{v}" for v in values])})"""
+    # datetime
+    elif isinstance(values[0], datetime):
+        return f"""({",".join(get_datetime_list_string(values))})"""
+    else:
+        warnings.warn("treating value as string because didn't know what else to do.")
+        return f"""({",".join([f"'{str(v)}'" for v in values])})"""
+
+
+def format_filter_item(filter: MetricFilter) -> str:
+    """Returns an SQL formatted string for single filter object.
+
+    Parameters
+    ----------
+    filter: models.MetricFilter
+        A single MetricFilter object.
+
+    Returns
+    -------
+    formatted_string : str
+    
+    """
+
+    if isinstance(filter.value, str):
+        return f"""{filter.column} {filter.operator} '{filter.value}'"""
+    elif (
+        isinstance(filter.value, int) 
+        or isinstance(filter.value, float)
+    ):
+        return f"""{filter.column} {filter.operator} {filter.value}"""
+    elif isinstance(filter.value, datetime):
+        dt_str = filter.value.strftime(SQL_DATETIME_STR_FORMAT)
+        return f"""{filter.column} {filter.operator} '{dt_str}'"""
+    elif (
+        isinstance(filter.value, Iterable) 
+        and not isinstance(filter.value, str)
+    ):
+        value = format_iterable_value(filter.value)
+        return f"""{filter.column} {filter.operator} {value}"""
+    else:
+        warnings.warn("treating value as string because didn't know what else to do.")
+        return f"""{filter.column} {filter.operator} '{str(filter.value)}'"""
+
+
+def format_filters(filters: List[MetricFilter]) -> List[str]:
+    """Generate SQL where clause string from filters.
+
+    Parameters
+    ----------
+    filters : List[MetricFilter]
+        A list of MetricFilter objects describing the filters.
+
+    Returns
+    -------
+    where_clause : str
+        A where clause formatted string 
     """
     if len(filters) > 0:
         filter_strs = []
         for f in filters:
-
-            filter_value = f["value"]
-            if isinstance(filter_value, Iterable):
-                # iterable
-            else:
-                # not iterable
-
-            # print(f)
-            
-        qry = f"""WHERE {" AND ".join(filter_strs)}"""
+            filter_strs.append(format_filter_item(f))
+        qry = f"""WHERE {f" AND ".join(filter_strs)}"""
         return qry
 
-    return ""
+    return "--no where clause"
     
 
 def calculate_nwm_feature_metrics(
@@ -45,7 +111,7 @@ def calculate_nwm_feature_metrics(
     observed_dir: str,
     group_by: List[str], 
     order_by: List[str], 
-    filters: List[dict]
+    filters: Union[List[dict], None] = None
 ) -> str:
     """Generate a metrics query
     
@@ -70,7 +136,20 @@ def calculate_nwm_feature_metrics(
     ]
     
     """
+    if filters == None:
+        filters = []
+        
+    metric_query = MetricQuery.parse_obj(
+        {
+            "forecast_dir": forecast_dir,
+            "observed_dir": observed_dir,
+            "group_by": group_by,
+            "order_by": order_by,
+            "filters": filter
+        }
+    )
     
+
     query =  f"""
         WITH joined as (
             SELECT 
