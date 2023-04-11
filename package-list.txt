@@ -46,11 +46,11 @@ brotli-bin=1.0.9=h166bdaf_8
 brotlipy=0.7.0=py310h5764c6d_1005
 bzip2=1.0.8=h7f98852_4
 c-ares=1.18.1=h7f98852_0
-ca-certificates=2022.12.7=ha878542_0
+ca-certificates=2023.01.10=h06a4308_0
 cachetools=5.3.0=pyhd8ed1ab_0
 cairo=1.16.0=ha61ee94_1014
 cartopy=0.21.1=py310h7eb24ba_1
-certifi=2022.12.7=pyhd8ed1ab_0
+certifi=2022.12.7=py310h06a4308_0
 cffi=1.15.1=py310h255011f_3
 cfitsio=4.2.0=hd9d235c_0
 cftime=1.6.2=py310hde88566_1
@@ -219,6 +219,7 @@ nbclassic=0.5.5=pyh8b2e9e2_0
 nbclient=0.7.3=pyhd8ed1ab_0
 nbconvert-core=7.3.0=pyhd8ed1ab_2
 nbformat=5.8.0=pyhd8ed1ab_0
+nbstripout=0.6.1=pyhd8ed1ab_0
 ncurses=6.3=h27087fc_1
 nest-asyncio=1.5.6=pyhd8ed1ab_0
 netcdf4=1.6.3=nompi_py310h0feb132_100
@@ -270,6 +271,7 @@ pycodestyle=2.10.0=pyhd8ed1ab_0
 pycparser=2.21=pyhd8ed1ab_0
 pyct=0.4.6=py_0
 pyct-core=0.4.6=py_0
+pydantic=1.10.2=py310h5eee18b_0
 pygments=2.14.0=pyhd8ed1ab_0
 pyjwt=2.6.0=pyhd8ed1ab_0
 pyopenssl=23.1.1=pyhd8ed1ab_0

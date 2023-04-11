@@ -1,20 +1,43 @@
-from typing import List
+from typing import List, Union
+from datetime import datetime
 import config
+from collections.abc import Iterable
+from models import MetricFilter, MetricQuery
 
+
+
+def format_filter_value(MetricFilter) -> str:
+    if type(f["value"]) == str:
+        filter_strs.append(f"""{f["column"]} {f["operator"]} '{f["value"]}'""")
+    else:
+        filter_strs.append(f"""{f["column"]} {f["operator"]} {f["value"]}""")
+
+
+
+ALLOWED_WHERE_COLUMNS = [""]
+ALLOWED_WHERE_OPERATORS = [""]
 
 def format_filters(filters: List[dict]) -> List[str]:
     """Generate strings from filter dict.
     
-   ToDo:  This is probably not robust enough.
+    ToDo:  This is probably not robust enough.
     """
-    filter_strs = []
-    for f in filters:
-        # print(f)
-        if type(f["value"]) == str:
-            filter_strs.append(f"""{f["column"]} {f["operator"]} '{f["value"]}'""")
-        else:
-            filter_strs.append(f"""{f["column"]} {f["operator"]} {f["value"]}""")
-    return filter_strs
+    if len(filters) > 0:
+        filter_strs = []
+        for f in filters:
+
+            filter_value = f["value"]
+            if isinstance(filter_value, Iterable):
+                # iterable
+            else:
+                # not iterable
+
+            # print(f)
+            
+        qry = f"""WHERE {" AND ".join(filter_strs)}"""
+        return qry
+
+    return ""
     
 
 def calculate_nwm_feature_metrics(
@@ -86,8 +109,7 @@ def calculate_nwm_feature_metrics(
             sum(observed_value - forecast_value)/count(*) as bias
         FROM
             joined
-        WHERE 
-            {" AND ".join(format_filters(filters))}
+        {format_filters(filters)}
         GROUP BY
             {",".join(group_by)}
         ORDER BY 

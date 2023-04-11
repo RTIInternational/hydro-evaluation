@@ -30,3 +30,12 @@ Git LFS is used for large files (*.csv, *.nc, etc.)
 `nbstripoutput` is configured to strip output from notebooks to keep the size down and make diffing files easier.  See https://github.com/kynan/nbstripout.
 Note, after cloning, you must run `nbstripout --install` in the repo to install `nbstripoutput`.
 The configuraion is stored in the `.gitattributes` file, but the tool must be installed per repo.
+You may need to install it with `conda install nbstripout` or similar depending on your environment.
+
+## To use local conda
+Install conda (miniconda3).  You may need to `eval "$(/home/[username]/miniconda3/bin/conda shell.bash hook)"` if you did not make it default when installing.
+`conda config --append channels conda-forge`
+`conda create --name evaluation --file package-list.txt`
+If you add any packages, run the following to update the package list:
+`conda list -e > package-list.txt`
+To add the `src/evaluation` path to the `PYTHONPATH`, from within the repo root (`hydro-evaluation`) run: `conda env config vars set PYTHONPATH=${PWD}/src/evaluation` 
