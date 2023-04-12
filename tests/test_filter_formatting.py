@@ -1,8 +1,9 @@
-import pytest
-import pandas as pd
 from datetime import datetime
-from pydantic import ValidationError
+
+import pandas as pd
+# import pytest
 from models import MetricFilter
+from pydantic import ValidationError
 from queries import queries
 
 
@@ -24,6 +25,26 @@ def test_filter_int():
     )
     filter_str = queries.format_filter_item(filter)
     assert filter_str == "nwm_feature_id = 123456"
+
+
+def test_filter_int_gte():
+    filter = MetricFilter(
+        column="nwm_feature_id", 
+        operator=">=", 
+        value=123456
+    )
+    filter_str = queries.format_filter_item(filter)
+    assert filter_str == "nwm_feature_id >= 123456"
+
+
+def test_filter_int_lt():
+    filter = MetricFilter(
+        column="nwm_feature_id", 
+        operator="<", 
+        value=123456
+    )
+    filter_str = queries.format_filter_item(filter)
+    assert filter_str == "nwm_feature_id < 123456"
 
 
 def test_filter_float():
@@ -109,6 +130,8 @@ def test_in_filter_datetime():
 if __name__ == "__main__":
     # test_filter_string()
     # test_filter_int()
+    test_filter_int_gte()
+    test_filter_int_lt()
     # test_filter_float()
     # test_filter_datetime()
     # test_in_filter_string_wrong_operator()

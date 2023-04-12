@@ -1,12 +1,13 @@
-import pytest
-import pandas as pd
 from datetime import datetime
-from pydantic import ValidationError
+
+import pandas as pd
+# import pytest
 from models import MetricFilter
+from pydantic import ValidationError
 from queries import queries
 
 
-def test_mutiple_filters():
+def test_multiple_filters():
     filter_1 = MetricFilter(
         column="nwm_feature_id", 
         operator="in", 
@@ -27,14 +28,6 @@ def test_no_filters():
 
 
 if __name__ == "__main__":
-    # test_filter_string()
-    # test_filter_int()
-    # test_filter_float()
-    # test_filter_datetime()
-    # test_in_filter_string_wrong_operator()
-    # test_in_filter_string_wrong_value_type()
-    # test_in_filter_string()
-    # test_in_filter_int()
-    # test_in_filter_float()
-    # test_in_filter_datetime()
+    test_multiple_filters()
+    test_no_filters()
     pass

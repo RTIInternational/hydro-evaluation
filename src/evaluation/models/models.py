@@ -1,16 +1,18 @@
-from datetime import datetime
-from typing import List, Optional, Union
 from collections.abc import Iterable
-from pydantic import ValidationError, validator
+from datetime import datetime
 from enum import Enum
+from typing import List, Optional, Union
 
 from pydantic import BaseModel as PydanticBaseModel
+from pydantic import ValidationError, validator
+
 
 def is_iterable_not_str(obj):
     if isinstance(obj, Iterable) and not isinstance(obj, str ):
         return True
     return False
-        
+
+
 class BaseModel(PydanticBaseModel):
     class Config:
         arbitrary_types_allowed = True
@@ -84,7 +86,7 @@ class MetricFilter(BaseModel):
 class MetricQuery(BaseModel):
     forecast_dir = str
     observed_dir = str
-    group_by = List[MetricFilterFieldEnum]
-    order_by = List[MetricFilterFieldEnum]
+    group_by = List[str]
+    order_by = List[str]
     filters = List[MetricFilter]
 
