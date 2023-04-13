@@ -27,7 +27,7 @@ The `location` data model is used to store geographic entities.  This could incl
 - `geometry`: [string/bytes] Geometry in WKT/WKB format.  For example "Point(100,200)".  CRS?
 
 ## Thresholds
-The `threshold` table to store other data about the location.  This could possibly replaced by a generic key:value table.
+The `threshold` data model is used to store other data about the location.  This could possibly replaced by a generic key:value table.
 
 - `location_id`: [string] Primary location ID of the location.
 - `threshold_name`: [string] name of threshold 
