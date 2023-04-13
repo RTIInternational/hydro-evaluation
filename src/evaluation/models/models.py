@@ -5,6 +5,7 @@ from typing import List, Optional, Union
 
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ValidationError, validator
+from pathlib import Path
 
 
 def is_iterable_not_str(obj):
@@ -32,41 +33,29 @@ class OperatorEnum(str, Enum):
 class MetricFilterFieldEnum(str, Enum):
     value_time = "value_time"
     reference_time = "reference_time"
-    nwm_feature_id = "nwm_feature_id"
-    forecast_value = "forecast_value"
+    secondary_location_id = "secondary_location_id"
+    secondary_value = "secondary_value"
     configuration = "configuration"  
     measurement_unit = "measurement_unit"
     variable_name = "variable_name"
     observed_value = "observed_value"
-    usgs_site_code = "usgs_site_code"
+    primary_location_id = "primary_location_id"
     lead_time = "lead_time"
-
-
-# class JoinedTable(BaseModel):
-#     value_time,
-#     reference_time,
-#     nwm_feature_id,   
-#     forecast_value, 
-#     configuration,  
-#     measurement_unit,     
-#     variable_name,
-#     observed_value,
-#     usgs_site_code,
-#     lead_time
-
-
-# class TimeseriesTable(BaseModel):
-#     value_time,
-#     reference_time,
-#     nwm_feature_id,   
-#     forecast_value, 
-#     configuration,  
-#     measurement_unit,     
-#     variable_name,
-#     observed_value,
-#     usgs_site_code,
-#     lead_time
+    geometry = "geometry"
     
+
+# class MetricEnum(str, Enum):
+#     value_time = "value_time"
+#     reference_time = "reference_time"
+#     secondary_location_id = "secondary_location_id"
+#     secondary_value = "secondary_value"
+#     configuration = "configuration"  
+#     measurement_unit = "measurement_unit"
+#     variable_name = "variable_name"
+#     observed_value = "observed_value"
+#     primary_location_id = "primary_location_id"
+#     lead_time = "lead_time"
+#     geometry = "geometry"
 
 class MetricFilter(BaseModel):
     column: MetricFilterFieldEnum
@@ -84,9 +73,28 @@ class MetricFilter(BaseModel):
         return v
 
 class MetricQuery(BaseModel):
-    forecast_dir: str
-    observed_dir: str
+    primary_filepath: Union[str, Path]
+    secondary_filepath: Union[str, Path]
+    crosswalk_filepath: Union[str, Path]
     group_by: List[MetricFilterFieldEnum]
     order_by: List[MetricFilterFieldEnum]
-    filters: List[MetricFilter]
+    filters: List[MetricFilter] = []
+    return_query: bool
+    geometry_filepath: Optional[Union[str, Path]]
+    include_geometry: bool
+
+    @validator('include_geometry')
+    def include_geometry_must_group_by_primary_location_id(cls, v, values):
+        if v == True and not MetricFilterFieldEnum.primary_location_id in values["group_by"]:
+            raise ValueError("`group_by` must contain `primary_location_id` to include geometry in returned data")
+    
+        if v == True and not values["geometry_filepath"]:
+            raise ValueError("`geometry_filepath` must be provided to include geometry in returned data")
+        
+        if MetricFilterFieldEnum.geometry in values["group_by"] and v == False:
+            raise ValueError("group_by contains `geometry` field but `include_geometry` is False, must be True")
+    
+        return v
+
+    
 

@@ -1,7 +1,7 @@
 from datetime import datetime
 
 import pandas as pd
-# import pytest
+import pytest
 from models import MetricFilter
 from pydantic import ValidationError
 from queries import queries
@@ -9,52 +9,52 @@ from queries import queries
 
 def test_filter_string():
     filter = MetricFilter(
-        column="nwm_feature_id", 
+        column="secondary_location_id", 
         operator="=", 
         value="123456"
     )
     filter_str = queries.format_filter_item(filter)
-    assert filter_str == "nwm_feature_id = '123456'"
+    assert filter_str == "secondary_location_id = '123456'"
 
 
 def test_filter_int():
     filter = MetricFilter(
-        column="nwm_feature_id", 
+        column="secondary_location_id", 
         operator="=", 
         value=123456
     )
     filter_str = queries.format_filter_item(filter)
-    assert filter_str == "nwm_feature_id = 123456"
+    assert filter_str == "secondary_location_id = 123456"
 
 
 def test_filter_int_gte():
     filter = MetricFilter(
-        column="nwm_feature_id", 
+        column="secondary_location_id", 
         operator=">=", 
         value=123456
     )
     filter_str = queries.format_filter_item(filter)
-    assert filter_str == "nwm_feature_id >= 123456"
+    assert filter_str == "secondary_location_id >= 123456"
 
 
 def test_filter_int_lt():
     filter = MetricFilter(
-        column="nwm_feature_id", 
+        column="secondary_location_id", 
         operator="<", 
         value=123456
     )
     filter_str = queries.format_filter_item(filter)
-    assert filter_str == "nwm_feature_id < 123456"
+    assert filter_str == "secondary_location_id < 123456"
 
 
 def test_filter_float():
     filter = MetricFilter(
-        column="nwm_feature_id", 
+        column="secondary_location_id", 
         operator="=", 
         value=123.456
     )
     filter_str = queries.format_filter_item(filter)
-    assert filter_str == "nwm_feature_id = 123.456"
+    assert filter_str == "secondary_location_id = 123.456"
 
 
 def test_filter_datetime():
@@ -70,7 +70,7 @@ def test_filter_datetime():
 def test_in_filter_string_wrong_operator():
     with pytest.raises(ValidationError):
         filter = MetricFilter(
-            column="nwm_feature_id", 
+            column="secondary_location_id", 
             operator="=", 
             value=["123456", "9876"]
         )
@@ -80,7 +80,7 @@ def test_in_filter_string_wrong_operator():
 def test_in_filter_string_wrong_value_type():
     with pytest.raises(ValidationError):
         filter = MetricFilter(
-            column="nwm_feature_id", 
+            column="secondary_location_id", 
             operator="in", 
             value="9876"
         )
@@ -89,32 +89,32 @@ def test_in_filter_string_wrong_value_type():
 
 def test_in_filter_string():
     filter = MetricFilter(
-        column="nwm_feature_id", 
+        column="secondary_location_id", 
         operator="in", 
         value=["123456", "9876"]
     )
     filter_str = queries.format_filter_item(filter)
-    assert filter_str == "nwm_feature_id in ('123456','9876')"
+    assert filter_str == "secondary_location_id in ('123456','9876')"
 
 
 def test_in_filter_int():
     filter = MetricFilter(
-        column="nwm_feature_id", 
+        column="secondary_location_id", 
         operator="in", 
         value=[123456, 9876]
     )
     filter_str = queries.format_filter_item(filter)
-    assert filter_str == "nwm_feature_id in (123456,9876)"
+    assert filter_str == "secondary_location_id in (123456,9876)"
 
 
 def test_in_filter_float():
     filter = MetricFilter(
-        column="nwm_feature_id", 
+        column="secondary_location_id", 
         operator="in", 
         value=[123.456, 98.76]
     )
     filter_str = queries.format_filter_item(filter)
-    assert filter_str == "nwm_feature_id in (123.456,98.76)"
+    assert filter_str == "secondary_location_id in (123.456,98.76)"
 
 
 def test_in_filter_datetime():
@@ -130,8 +130,8 @@ def test_in_filter_datetime():
 if __name__ == "__main__":
     # test_filter_string()
     # test_filter_int()
-    test_filter_int_gte()
-    test_filter_int_lt()
+    # test_filter_int_gte()
+    # test_filter_int_lt()
     # test_filter_float()
     # test_filter_datetime()
     # test_in_filter_string_wrong_operator()

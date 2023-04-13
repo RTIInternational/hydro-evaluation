@@ -25,7 +25,7 @@ The `location` data model is used to store geographic entities.  This could incl
 
 - `id`: [string] This is the ID of the location data and should match the `timeseries.location_id` and the `crosswalk.primary_location_id` as well as the `threshold.location_id` (e.g., usgs-0123456789).  This is the ID associated with the "observed" timeseries.
 - `name`: [string] This is the common name for location (e.g., Some River at Some City, Some State).  This will be used for plots
-- `geometry`: [string/bytes] Geometry in WKT/WKB format.  For example "Point(100,200)".  CRS?
+- `geometry`: [string/bytes] Geometry in WKT/WKB format.  For example "Point(100,200)".  Must be "EPSG:4326"
 
 ## Thresholds
 The `threshold` data model is used to store other data about the location.  This could possibly replaced by a generic key:value table.
@@ -53,7 +53,7 @@ The following represents the recommended directory structure for a study. This w
     │   └── usgs_sites.parquet
     ├── timeseries
     │   ├── new directory for each source
-    │   ├── ngen
+    │   ├── research_model
     │   │   ├── forcing
     │   │   │   ├── _cat-1_2022-01-01.csv
     │   │   │   └── forcing.parquet
@@ -61,7 +61,7 @@ The following represents the recommended directory structure for a study. This w
     │   │       ├── _cat-1_ouput.csv
     │   │       ├── _nex-1_output.csv
     │   │       └── output.parquet
-    │   ├── nwm
+    │   ├── nwm21
     │   │   ├── forcing_medium_range
     │   │   │   └── _20220101T00Z.parquet
     │   │   └── medium_range

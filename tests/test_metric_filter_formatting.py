@@ -1,7 +1,7 @@
 from datetime import datetime
 
 import pandas as pd
-# import pytest
+import pytest
 from models import MetricFilter
 from pydantic import ValidationError
 from queries import queries
@@ -9,7 +9,7 @@ from queries import queries
 
 def test_multiple_filters():
     filter_1 = MetricFilter(
-        column="nwm_feature_id", 
+        column="secondary_location_id", 
         operator="in", 
         value=["123456", "9876543"]
     )
@@ -19,7 +19,7 @@ def test_multiple_filters():
         value=datetime(2023, 1, 1, 0, 0, 0)
     )
     filter_str = queries.format_filters([filter_1, filter_2])
-    assert filter_str == "WHERE nwm_feature_id in ('123456','9876543') AND reference_time = '2023-01-01 00:00:00'"
+    assert filter_str == "WHERE secondary_location_id in ('123456','9876543') AND reference_time = '2023-01-01 00:00:00'"
 
 
 def test_no_filters():
@@ -28,6 +28,6 @@ def test_no_filters():
 
 
 if __name__ == "__main__":
-    test_multiple_filters()
-    test_no_filters()
+    # test_multiple_filters()
+    # test_no_filters()
     pass

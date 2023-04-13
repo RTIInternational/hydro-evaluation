@@ -4,7 +4,10 @@ from datetime import datetime
 from typing import List, Union
 
 import config
+import duckdb
 from models import MetricFilter, MetricQuery
+import pandas as pd
+import geopandas as gpd
 
 SQL_DATETIME_STR_FORMAT = "%Y-%m-%d %H:%M:%S"
 
@@ -107,100 +110,166 @@ def format_filters(filters: List[MetricFilter]) -> List[str]:
     return "--no where clause"
     
 
-def calculate_nwm_feature_metrics(
-    forecast_dir: str,
-    observed_dir: str,
-    crosswalk_file: str,
+def generate_geometry_join_clause(mq: MetricQuery):
+    """Generate the join clause for"""
+    if mq.include_geometry:
+        return f"""JOIN '{str(mq.geometry_filepath)}' gf
+            on pf.location_id = gf.id 
+        """
+    return ""
+
+
+def generate_geometry_select_clause(mq: MetricQuery):
+    if mq.include_geometry:
+        return ",cast(gf.geometry as varchar) as geometry"
+    return ""
+
+
+def get_metrics(
+    primary_filepath: str,
+    secondary_filepath: str,
+    crosswalk_filepath: str,
     group_by: List[str], 
     order_by: List[str], 
-    filters: Union[List[dict], None] = None
-) -> str:
-    """Generate a metrics query
-    
-    group_by = ["lead_time", "nwm_feature_id"]
-    order_by = ["lead_time", "nwm_feature_id", "lead_time"]
-    filters = [
-        {
-            "column": "nwm_feature_id",
-            "operator": "=",
-            "value": "'123456'"
-        },
-        {
-            "column": "reference_time",
-            "operator": "=",
-            "value": "'2022-01-01 00:00'"
-        },
-        {
-            "column": "lead_time",
-            "operator": "<=",
-            "value": "'10 days'"
-        }
-    ]
-    
+    filters: Union[List[dict], None] = None,
+    return_query: bool = True,
+    geometry_filepath: Union[str, None] = None,
+    include_geometry: bool = False,
+) -> Union[str, pd.DataFrame, gpd.GeoDataFrame]:
+    """Calculate performance metrics using database queries.
+
+    Parameters
+    ----------
+    primary_filepath : str
+        File path to the "observed" data.  String must include path to file(s) 
+        and can include wildcards.  For example, "/path/to/parquet/*.parquet"
+    secondary_filepath : str
+        File path to the "forecast" data.  String must include path to file(s) 
+        and can include wildcards.  For example, "/path/to/parquet/*.parquet"
+    crosswalk_filepath : str
+        File path to single crosswalk file.
+    group_by : List[str]
+        List of column/field names to group timeseries data by.
+    order_by : List[str]
+        List of column/field names to order results by.
+    filters : Union[List[dict], None] = None
+        List of dictionaries describing the "where" clause to limit data that 
+        is included in metrics.
+    return_query: bool = False
+        True returns the query string instead of the data
+    include_geometry: bool = True
+        True joins the geometry to the query results.  Only works if `primary_location_id` 
+        is included as a group_by field.
+
+    Returns
+    -------
+    results : Union[str, pd.DataFrame, gpd.GeoDataFrame]
+
+    Examples:
+        group_by = ["lead_time", "primary_location_id"]
+        order_by = ["lead_time", "primary_location_id"]
+        filters = [
+            {
+                "column": "primary_location_id",
+                "operator": "=",
+                "value": "'123456'"
+            },
+            {
+                "column": "reference_time",
+                "operator": "=",
+                "value": "'2022-01-01 00:00'"
+            },
+            {
+                "column": "lead_time",
+                "operator": "<=",
+                "value": "'10 days'"
+            }
+        ]
     """
+
     if filters == None:
         filters = []
   
-    metric_query = MetricQuery.parse_obj(
+    mq = MetricQuery.parse_obj(
         {
-            "forecast_dir": forecast_dir,
-            "observed_dir": observed_dir,
+            "primary_filepath": primary_filepath,
+            "secondary_filepath": secondary_filepath,
+            "crosswalk_filepath": crosswalk_filepath,
             "group_by": group_by,
             "order_by": order_by,
-            "filters": filters
+            "filters": filters,
+            "return_query": return_query,
+            "include_geometry": include_geometry,
+            "geometry_filepath": geometry_filepath
         }
     )
+
+    if mq.include_geometry:
+        if "geometry" not in mq.group_by:
+            mq.group_by.append("geometry")
 
     query =  f"""
         WITH joined as (
             SELECT 
-                nd.reference_time,
-                nd.value_time,
-                nd.nwm_feature_id,   
-                nd.value as forecast_value, 
-                nd.configuration,  
-                nd.measurement_unit,     
-                nd.variable_name,
-                ud.value as observed_value,
-                ud.usgs_site_code,
-                nd.value_time - nd.reference_time as lead_time
-            FROM '{forecast_dir}/*.parquet' nd 
-            JOIN '{config.ROUTE_LINK_PARQUET}' nux 
-                on nux.nwm_feature_id = nd.nwm_feature_id 
-            JOIN '{observed_dir}/*.parquet' ud 
-                on nux.gage_id = ud.usgs_site_code 
-                and nd.value_time = ud.value_time 
-                and nd.measurement_unit = ud.measurement_unit
-                and nd.variable_name = ud.variable_name
+                sf.reference_time,
+                sf.value_time,
+                sf.location_id as secondary_location_id,   
+                sf.value as secondary_value, 
+                sf.configuration,  
+                sf.measurement_unit,     
+                sf.variable_name,
+                pf.value as primary_value,
+                pf.location_id as primary_location_id, 
+                sf.value_time - sf.reference_time as lead_time
+                {generate_geometry_select_clause(mq)}
+            FROM '{str(mq.secondary_filepath)}' sf 
+            JOIN '{str(mq.crosswalk_filepath)}' cf
+                on cf.secondary_location_id = sf.location_id 
+            JOIN '{str(mq.primary_filepath)}' pf 
+                on cf.primary_location_id = pf.location_id 
+                and sf.value_time = pf.value_time 
+                and sf.measurement_unit = pf.measurement_unit
+                and sf.variable_name = pf.variable_name
+            {generate_geometry_join_clause(mq)}
         )
         SELECT 
-            {",".join(group_by)},
-            regr_intercept(forecast_value, observed_value) as intercept,
-            covar_pop(forecast_value, observed_value) as covariance,
-            corr(forecast_value, observed_value) as corr,
-            regr_r2(forecast_value, observed_value) as r_squared,
-            count(forecast_value) as forecast_count,
-            count(observed_value) as observed_count,
-            avg(forecast_value) as forecast_average,
-            avg(observed_value) as observed_average,
-            var_pop(forecast_value) as forecast_variance,
-            var_pop(observed_value) as observed_variance,
-            max(forecast_value) - max(observed_value) as max_forecast_delta,
-            sum(observed_value - forecast_value)/count(*) as bias
+            {",".join(mq.group_by)},
+            regr_intercept(secondary_value, primary_value) as intercept,
+            covar_pop(secondary_value, primary_value) as covariance,
+            corr(secondary_value, primary_value) as corr,
+            regr_r2(secondary_value, primary_value) as r_squared,
+            count(secondary_value) as secondary_count,
+            count(primary_value) as primary_count,
+            avg(secondary_value) as secondary_average,
+            avg(primary_value) as primary_average,
+            var_pop(secondary_value) as secondary_variance,
+            var_pop(primary_value) as primary_variance,
+            max(secondary_value) - max(primary_value) as max_period_delta,
+            sum(primary_value - secondary_value)/count(*) as bias
         FROM
             joined
-        {format_filters(metric_query.filters)}
+        {format_filters(mq.filters)}
         GROUP BY
-            {",".join(group_by)}
+            {",".join(mq.group_by)}
         ORDER BY 
-            {",".join(order_by)}
+            {",".join(mq.order_by)}
     ;"""
-    return query
+
+    if mq.return_query:
+        return query
+    
+    df = duckdb.query(query).to_df()
+
+    if mq.include_geometry:
+        df["geometry"] = gpd.GeoSeries.from_wkt(df["geometry"])
+        return gpd.GeoDataFrame(df, crs="EPSG:4326", geometry="geometry")
+    
+    return df
 
 
 def get_joined_nwm_feature_timeseries(
-    forecast_dir: str,
-    observed_dir: str,
+    secondary_dir: str,
+    primary_dir: str,
     filters: List[dict]
 ) -> str:
     """Fetch joined timeseries."""
@@ -208,24 +277,24 @@ def get_joined_nwm_feature_timeseries(
     query = f"""
         WITH joined as (
             SELECT 
-                nd.reference_time,
-                nd.value_time,
-                nd.nwm_feature_id,   
-                nd.value as forecast_value, 
-                nd.configuration,  
-                nd.measurement_unit,     
-                nd.variable_name,
-                ud.value as observed_value,
-                ud.usgs_site_code,
-                nd.value_time - nd.reference_time as lead_time
-            FROM '{forecast_dir}/*.parquet' nd 
-            JOIN '{config.ROUTE_LINK_PARQUET}' nux 
-                on nux.nwm_feature_id = nd.nwm_feature_id 
-            JOIN '{observed_dir}/*.parquet' ud 
-                on nux.gage_id = ud.usgs_site_code 
-                and nd.value_time = ud.value_time 
-                and nd.measurement_unit = ud.measurement_unit
-                and nd.variable_name = ud.variable_name
+                sf.reference_time,
+                sf.value_time,
+                sf.nwm_feature_id,   
+                sf.value as secondary_value, 
+                sf.configuration,  
+                sf.measurement_unit,     
+                sf.variable_name,
+                pf.value as primary_value,
+                pf.usgs_site_code,
+                sf.value_time - sf.reference_time as lead_time
+            FROM '{secondary_dir}/*.parquet' sf 
+            JOIN '{config.ROUTE_LINK_PARQUET}' crosswalk 
+                on crosswalk.nwm_feature_id = sf.nwm_feature_id 
+            JOIN '{primary_dir}/*.parquet' pf 
+                on crosswalk.gage_id = pf.usgs_site_code 
+                and sf.value_time = pf.value_time 
+                and sf.measurement_unit = pf.measurement_unit
+                and sf.variable_name = pf.variable_name
         )
         SELECT 
             *
@@ -239,8 +308,8 @@ def get_joined_nwm_feature_timeseries(
 
 
 def calculate_catchment_metrics(
-    forecast_dir: str,
-    observed_dir: str,
+    secondary_dir: str,
+    primary_dir: str,
     group_by: List[str], 
     order_by: List[str], 
     filters: List[dict]
@@ -272,36 +341,36 @@ def calculate_catchment_metrics(
     query =  f"""
         WITH joined as (
             SELECT 
-                nd.reference_time,
-                nd.value_time,
-                nd.catchment_id,   
-                nd.value as forecast_value, 
-                nd.configuration,  
-                nd.measurement_unit,     
-                nd.variable_name,
-                ud.value as observed_value,
-                nd.value_time - nd.reference_time as lead_time
-            FROM '{forecast_dir}/*.parquet' nd 
-            JOIN '{observed_dir}/*.parquet' ud 
-                on ud.catchment_id = nd.catchment_id
-                and nd.value_time = ud.value_time 
-                and nd.measurement_unit = ud.measurement_unit
-                and nd.variable_name = ud.variable_name
+                sf.reference_time,
+                sf.value_time,
+                sf.catchment_id,   
+                sf.value as secondary_value, 
+                sf.configuration,  
+                sf.measurement_unit,     
+                sf.variable_name,
+                pf.value as primary_value,
+                sf.value_time - sf.reference_time as lead_time
+            FROM '{secondary_dir}/*.parquet' sf 
+            JOIN '{primary_dir}/*.parquet' pf 
+                on pf.catchment_id = sf.catchment_id
+                and sf.value_time = pf.value_time 
+                and sf.measurement_unit = pf.measurement_unit
+                and sf.variable_name = pf.variable_name
         )
         SELECT 
             {",".join(group_by)},
-            regr_intercept(forecast_value, observed_value) as intercept,
-            covar_pop(forecast_value, observed_value) as covariance,
-            corr(forecast_value, observed_value) as corr,
-            regr_r2(forecast_value, observed_value) as r_squared,
-            count(forecast_value) as forecast_count,
-            count(observed_value) as observed_count,
-            avg(forecast_value) as forecast_average,
-            avg(observed_value) as observed_average,
-            var_pop(forecast_value) as forecast_variance,
-            var_pop(observed_value) as observed_variance,
-            max(forecast_value) - max(observed_value) as max_forecast_delta,
-            sum(observed_value - forecast_value)/count(*) as bias
+            regr_intercept(secondary_value, primary_value) as intercept,
+            covar_pop(secondary_value, primary_value) as covariance,
+            corr(secondary_value, primary_value) as corr,
+            regr_r2(secondary_value, primary_value) as r_squared,
+            count(secondary_value) as secondary_count,
+            count(primary_value) as primary_count,
+            avg(secondary_value) as secondary_average,
+            avg(primary_value) as primary_average,
+            var_pop(secondary_value) as secondary_variance,
+            var_pop(primary_value) as primary_variance,
+            max(secondary_value) - max(primary_value) as max_secondary_delta,
+            sum(primary_value - secondary_value)/count(*) as bias
         FROM
             joined
         WHERE 
@@ -315,8 +384,8 @@ def calculate_catchment_metrics(
 
 
 def get_joined_catchment_timeseries(
-    forecast_dir: str,
-    observed_dir: str, 
+    secondary_dir: str,
+    primary_dir: str, 
     filters: List[dict]
 ) -> str:
     """Generate a metrics query
@@ -344,21 +413,21 @@ def get_joined_catchment_timeseries(
     query =  f"""
         WITH joined as (
             SELECT 
-                nd.reference_time,
-                nd.value_time,
-                nd.catchment_id,   
-                nd.value as forecast_value, 
-                nd.configuration,  
-                nd.measurement_unit,     
-                nd.variable_name,
-                ud.value as observed_value,
-                nd.value_time - nd.reference_time as lead_time
-            FROM '{forecast_dir}/*.parquet' nd 
-            JOIN '{observed_dir}/*.parquet' ud 
-                on ud.catchment_id = nd.catchment_id
-                and nd.value_time = ud.value_time 
-                and nd.measurement_unit = ud.measurement_unit
-                and nd.variable_name = ud.variable_name
+                sf.reference_time,
+                sf.value_time,
+                sf.catchment_id,   
+                sf.value as secondary_value, 
+                sf.configuration,  
+                sf.measurement_unit,     
+                sf.variable_name,
+                pf.value as primary_value,
+                sf.value_time - sf.reference_time as lead_time
+            FROM '{secondary_dir}/*.parquet' sf 
+            JOIN '{primary_dir}/*.parquet' pf 
+                on pf.catchment_id = sf.catchment_id
+                and sf.value_time = pf.value_time 
+                and sf.measurement_unit = pf.measurement_unit
+                and sf.variable_name = pf.variable_name
         )
         SELECT 
             *
