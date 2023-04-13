@@ -1,5 +1,7 @@
-# CHEET Data Models
+# Evaluation Data Models
 This document describes the v0.1 data models used in the system.  These are considered the minimum fields required for the system to work.  Additional fields can be added but may not be show up by default in the prepared queries.  The `timeseries`, `crosswalk`, `location` and `threshold` data models are schemas but not table names.  In practice the data will be stored in one or more files (parquet or csv) and can have any name.
+
+This is intended to be a living document that provides a common data model to work from that will be updated as we progress, learn what works, learn what doesn't, etc.
 
 ## Timeseries
 The `timeseries` data model (mostly taken from HydroTools) describes the schema used to store, you guessed it, timeseries data from both observed and simulated sources.  In the context of this system, this data model will be utilized as the format to store data as parquet files.  As such, a standard file directory structure is also important.  See [Cache Directory Structure] below.
@@ -33,24 +35,37 @@ The `threshold` data model is used to store other data about the location.  This
 - `threshold_name`: [string] name of threshold 
 - `threshold_value`: [string] threshold value
 
+
+![data_model](data_model.png "Data Model")
+
 # Cache Directory Structure
-studies
-    study_1
-        geo
-        nwm
-        parquet
-            nwm_output
-            ngen_output
-            usgs_obs
-            nwm_usgs_crosswalk.csv
-            ngen_usgs_crosswalk.csv
-        zarr
-    study_2
-        geo
-        nwm
-        parquet
-        zarr
-
-
-# Discussion
-Forecast and observed vs. primary and secondary, vs. ...?
+The following represents the recommended directory structure for a study. This will certainly evolve over time but provides a starting point.
+```text
+.
+├── new directory for each study
+└── study_1
+    ├── geo
+    │   ├── usgs_nwm_crosswalk.csv
+    │   ├── usgs_nwm_crosswalk.parquet
+    │   ├── usgs_sites.geojson
+    │   └── usgs_sites.parquet
+    ├── timeseries
+    │   ├── new directory for each source
+    │   ├── ngen
+    │   │   ├── forcing
+    │   │   │   ├── _cat-1_2022-01-01.csv
+    │   │   │   └── forcing.parquet
+    │   │   └── output
+    │   │       ├── _cat-1_ouput.csv
+    │   │       ├── _nex-1_output.csv
+    │   │       └── output.parquet
+    │   ├── nwm
+    │   │   ├── forcing_medium_range
+    │   │   │   └── _20220101T00Z.parquet
+    │   │   └── medium_range
+    │   │       └── _20220101T00Z.parquet
+    │   └── usgs
+    │       └── gage_data.parquet
+    └── zarr
+        └── zarr json files
+```
