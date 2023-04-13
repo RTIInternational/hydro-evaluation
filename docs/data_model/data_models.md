@@ -1,5 +1,5 @@
 # Evaluation Data Models
-This document describes the v0.1 data models used in the system.  These are considered the minimum fields required for the system to work.  Additional fields can be added but may not be show up by default in the prepared queries.  The `timeseries`, `crosswalk`, `location` and `threshold` data models are schemas but not table names.  In practice the data will be stored in one or more files (parquet or csv) and can have any name.
+This document describes the initial data models used in the yet-to-be-named evaluation system.  These are considered the minimum fields required for the system to work.  Additional fields can be added but may not be show up by default in the prepared queries.  The `timeseries`, `crosswalk`, `location` and `threshold` data models are schemas but not table names.  In practice the data will be stored in one or more files (parquet or csv) and can have any name.  In some cases it could also be implemented as an actual database table.
 
 This is intended to be a living document that provides a common data model to work from that will be updated as we progress, learn what works, learn what doesn't, etc.
 
@@ -35,9 +35,12 @@ The `threshold` data model is used to store other data about the location.  This
 - `threshold_name`: [string] name of threshold 
 - `threshold_value`: [string] threshold value
 
-
+## Data Model Diagram
+The following is a visual representation of the data model structure.
 ![data_model](data_model.png "Data Model")
 
+## Uniqueness and Referential Integrity
+The general gist of this topic is that the current file-based approach (i.e. using parquet files) to store that data does not include any referential integrity or guarantee uniqueness of timeseries values.  A more traditional relational database would provide this but also tends to use far more storage and be slower to insert data to in our experience.  Some sort of hybrid approach to using parquet files and traditional database tables may be consider at a later date.
 # Cache Directory Structure
 The following represents the recommended directory structure for a study. This will certainly evolve over time but provides a starting point.
 ```text
