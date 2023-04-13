@@ -12,7 +12,6 @@ The `timeseries` data model (mostly taken from HydroTools) describes the schema 
 - `variable_name`: [string] This describes the type of value, for example `streamflow`.  This are not verified by the system but should be consistent.
 - `measurement_unit`: [string] This describes the units of the - `value`, for example `m^3/s`. This are not verified by the system but should be consistent.
 - `configuration`: [string] This is a reference string describing the model simulation.  In the context of the v2.2 NWM, this would refer to the a model run such as `medium_range` or `analysis_assim`.  In the NextGen system or a test-bed simulation, this would be a relevant identifier.
-- `series`: [int]
 - `location_id`: [string] This is the `location_id` associated assigned to the timeseries by the creating entity.  For example, if this timeseries was USGS gage data, then the - `location_id` would be the USGS site code, if it was output from V2.2 of the National Water Model, then the NWM feature ID would be used.  For clarity, a "source string" can be prepend to the ID to make the source of the ID obvious.  For example `usgs-0123456789` or `huc10-1834526098`.  "source string" should be lowercase and separated from the ID with a hyphen ("-").
 
 ## Crosswalk
