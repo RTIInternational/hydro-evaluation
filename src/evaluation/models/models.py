@@ -84,9 +84,9 @@ class MetricFilter(BaseModel):
         return v
 
 class MetricQuery(BaseModel):
-    forecast_dir = str
-    observed_dir = str
-    group_by = List[str]
-    order_by = List[str]
-    filters = List[MetricFilter]
+    forecast_dir: str
+    observed_dir: str
+    group_by: List[MetricFilterFieldEnum]
+    order_by: List[MetricFilterFieldEnum]
+    filters: List[MetricFilter]
 
