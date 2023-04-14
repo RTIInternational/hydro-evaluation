@@ -15,6 +15,29 @@ SQL_DATETIME_STR_FORMAT = "%Y-%m-%d %H:%M:%S"
 def get_datetime_list_string(values):
     return [f"'{v.strftime(SQL_DATETIME_STR_FORMAT)}'" for v in values]
 
+def df_to_gdf(df: pd.DataFrame) -> gpd.GeoDataFrame:
+    """Convert pd.DataFrame to gpd.GeoDataFrame.
+    
+    When the `geometry` column is read from a parquet file using DuckBD
+    it is a bytearray in the resulting pd.DataFrame.  The `geometry` needs
+    to be convert to bytes before GeoPandas can work with it.  This function 
+    does that.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with a `geometry` column that has geometry stored as 
+        a bytearray.
+
+    Returns
+    -------
+    gdf : gpd.GeoDataFrame
+        GeoDataFrame with a valid `geometry` column.
+
+    """
+    df["geometry"] = gpd.GeoSeries.from_wkb(df["geometry"].apply(lambda x : bytes(x)))
+    return gpd.GeoDataFrame(df, crs="EPSG:4326", geometry="geometry")
+
 
 def format_iterable_value(
         values: Iterable[Union[str, int, float, datetime]]
@@ -271,8 +294,7 @@ def get_metrics(
     # df["variable_name"] = df["variable_name"].astype("category")
 
     if mq.include_geometry:
-        df["geometry"] = gpd.GeoSeries.from_wkt(df["geometry"])
-        return gpd.GeoDataFrame(df, crs="EPSG:4326", geometry="geometry")
+        return df_to_gdf(df)
     
     return df
 
@@ -398,8 +420,7 @@ def get_joined_timeseries(
     df["variable_name"] = df["variable_name"].astype("category")
 
     if jtq.include_geometry:
-        df["geometry"] = gpd.GeoSeries.from_wkt(df["geometry"])
-        return gpd.GeoDataFrame(df, crs="EPSG:4326", geometry="geometry")
+        return df_to_gdf(df)
     
     return df
 

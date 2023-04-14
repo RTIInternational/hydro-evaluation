@@ -147,7 +147,7 @@ def test_timeseries_query_df_filter():
 if __name__ == "__main__":
     # test_metric_query_str()
     # test_metric_metric_query_df()
-    # test_metric_query_gdf()
+    test_metric_query_gdf()
     # test_metric_query_gdf_2()
     # test_metric_query_gdf_no_geom()
     # test_metric_query_gdf_missing_group_by()

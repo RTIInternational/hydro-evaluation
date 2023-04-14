@@ -18,5 +18,4 @@ df.to_parquet("crosswalk.parquet")
 
 print(f"gages.geojson")
 gdf = gpd.read_file("gages.geojson")
-gdf["geometry"] = gdf["geometry"].to_wkt()
 gdf.to_parquet("gages.parquet")
