@@ -1,1 +1,1 @@
-from models.models import MetricFilter, MetricQuery
+from models.models import Filter, MetricQuery, JoinedTimeseriesQuery

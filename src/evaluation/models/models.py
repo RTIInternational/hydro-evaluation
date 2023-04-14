@@ -57,7 +57,7 @@ class MetricFilterFieldEnum(str, Enum):
 #     lead_time = "lead_time"
 #     geometry = "geometry"
 
-class MetricFilter(BaseModel):
+class Filter(BaseModel):
     column: MetricFilterFieldEnum
     operator: OperatorEnum
     value: Union[str, int, float, datetime, List[Union[str, int, float, datetime]]]
@@ -78,7 +78,7 @@ class MetricQuery(BaseModel):
     crosswalk_filepath: Union[str, Path]
     group_by: List[MetricFilterFieldEnum]
     order_by: List[MetricFilterFieldEnum]
-    filters: List[MetricFilter] = []
+    filters: List[Filter] = []
     return_query: bool
     geometry_filepath: Optional[Union[str, Path]]
     include_geometry: bool
@@ -97,4 +97,19 @@ class MetricQuery(BaseModel):
         return v
 
     
+class JoinedTimeseriesQuery(BaseModel):
+    primary_filepath: Union[str, Path]
+    secondary_filepath: Union[str, Path]
+    crosswalk_filepath: Union[str, Path]
+    order_by: List[MetricFilterFieldEnum]
+    filters: List[Filter] = []
+    return_query: bool
+    geometry_filepath: Optional[Union[str, Path]]
+    include_geometry: bool
 
+    @validator('include_geometry')
+    def include_geometry_must_group_by_primary_location_id(cls, v, values):
+        if v == True and not values["geometry_filepath"]:
+            raise ValueError("`geometry_filepath` must be provided to include geometry in returned data")
+    
+        return v

@@ -5,7 +5,7 @@ from typing import List, Union
 
 import config
 import duckdb
-from models import MetricFilter, MetricQuery
+from models import Filter, MetricQuery, JoinedTimeseriesQuery
 import pandas as pd
 import geopandas as gpd
 
@@ -52,7 +52,7 @@ def format_iterable_value(
         return f"""({",".join([f"'{str(v)}'" for v in values])})"""
 
 
-def format_filter_item(filter: MetricFilter) -> str:
+def format_filter_item(filter: Filter) -> str:
     """Returns an SQL formatted string for single filter object.
 
     Parameters
@@ -87,7 +87,7 @@ def format_filter_item(filter: MetricFilter) -> str:
         return f"""{filter.column} {filter.operator} '{str(filter.value)}'"""
 
 
-def format_filters(filters: List[MetricFilter]) -> List[str]:
+def format_filters(filters: List[Filter]) -> List[str]:
     """Generate SQL where clause string from filters.
 
     Parameters
@@ -110,18 +110,22 @@ def format_filters(filters: List[MetricFilter]) -> List[str]:
     return "--no where clause"
     
 
-def generate_geometry_join_clause(mq: MetricQuery):
+def generate_geometry_join_clause(
+        q: Union[MetricQuery, JoinedTimeseriesQuery]
+    ) -> str:
     """Generate the join clause for"""
-    if mq.include_geometry:
-        return f"""JOIN '{str(mq.geometry_filepath)}' gf
+    if q.include_geometry:
+        return f"""JOIN '{str(q.geometry_filepath)}' gf
             on pf.location_id = gf.id 
         """
     return ""
 
 
-def generate_geometry_select_clause(mq: MetricQuery):
-    if mq.include_geometry:
-        return ",cast(gf.geometry as varchar) as geometry"
+def generate_geometry_select_clause(
+        q: Union[MetricQuery, JoinedTimeseriesQuery]
+    ) -> str:
+    if q.include_geometry:
+        return ",gf.geometry as geometry"
     return ""
 
 
@@ -260,6 +264,12 @@ def get_metrics(
     
     df = duckdb.query(query).to_df()
 
+    # df["primary_location_id"] = df["primary_location_id"].astype("category")
+    # df["secondary_location_id"] = df["secondary_location_id"].astype("category")
+    # df["configuration"] = df["configuration"].astype("category")
+    # df["measurement_unit"] = df["measurement_unit"].astype("category")
+    # df["variable_name"] = df["variable_name"].astype("category")
+
     if mq.include_geometry:
         df["geometry"] = gpd.GeoSeries.from_wkt(df["geometry"])
         return gpd.GeoDataFrame(df, crs="EPSG:4326", geometry="geometry")
@@ -267,173 +277,139 @@ def get_metrics(
     return df
 
 
-def get_joined_nwm_feature_timeseries(
-    secondary_dir: str,
-    primary_dir: str,
-    filters: List[dict]
-) -> str:
-    """Fetch joined timeseries."""
-
-    query = f"""
-        WITH joined as (
-            SELECT 
-                sf.reference_time,
-                sf.value_time,
-                sf.nwm_feature_id,   
-                sf.value as secondary_value, 
-                sf.configuration,  
-                sf.measurement_unit,     
-                sf.variable_name,
-                pf.value as primary_value,
-                pf.usgs_site_code,
-                sf.value_time - sf.reference_time as lead_time
-            FROM '{secondary_dir}/*.parquet' sf 
-            JOIN '{config.ROUTE_LINK_PARQUET}' crosswalk 
-                on crosswalk.nwm_feature_id = sf.nwm_feature_id 
-            JOIN '{primary_dir}/*.parquet' pf 
-                on crosswalk.gage_id = pf.usgs_site_code 
-                and sf.value_time = pf.value_time 
-                and sf.measurement_unit = pf.measurement_unit
-                and sf.variable_name = pf.variable_name
-        )
-        SELECT 
-            *
-        FROM
-            joined
-        WHERE 
-            {" AND ".join(format_filters(filters))}
-    ;"""
-
-    return query
-
-
-def calculate_catchment_metrics(
-    secondary_dir: str,
-    primary_dir: str,
-    group_by: List[str], 
+def get_joined_timeseries(
+    primary_filepath: str,
+    secondary_filepath: str,
+    crosswalk_filepath: str,
     order_by: List[str], 
-    filters: List[dict]
-) -> str:
-    """Generate a metrics query
-    
-    group_by = ["lead_time", "nwm_feature_id"]
-    order_by = ["lead_time", "nwm_feature_id", "lead_time"]
-    filters = [
-        {
-            "column": "nwm_feature_id",
-            "operator": "=",
-            "value": "'123456'"
-        },
-        {
-            "column": "reference_time",
-            "operator": "=",
-            "value": "'2022-01-01 00:00'"
-        },
-        {
-            "column": "lead_time",
-            "operator": "<=",
-            "value": "'10 days'"
-        }
-    ]
-    
+    filters: Union[List[dict], None] = None,
+    return_query: bool = True,
+    geometry_filepath: Union[str, None] = None,
+    include_geometry: bool = False,
+) -> Union[str, pd.DataFrame, gpd.GeoDataFrame]:
+    """Retrieve joined timeseries using database query.
+
+    Parameters
+    ----------
+    primary_filepath : str
+        File path to the "observed" data.  String must include path to file(s) 
+        and can include wildcards.  For example, "/path/to/parquet/*.parquet"
+    secondary_filepath : str
+        File path to the "forecast" data.  String must include path to file(s) 
+        and can include wildcards.  For example, "/path/to/parquet/*.parquet"
+    crosswalk_filepath : str
+        File path to single crosswalk file.
+    order_by : List[str]
+        List of column/field names to order results by.
+    filters : Union[List[dict], None] = None
+        List of dictionaries describing the "where" clause to limit data that 
+        is included in metrics.
+    return_query: bool = False
+        True returns the query string instead of the data
+    include_geometry: bool = True
+        True joins the geometry to the query results.  Only works if `primary_location_id` 
+        is included as a group_by field.
+
+    Returns
+    -------
+    results : Union[str, pd.DataFrame, gpd.GeoDataFrame]
+
+    Examples:
+        order_by = ["lead_time", "primary_location_id"]
+        filters = [
+            {
+                "column": "primary_location_id",
+                "operator": "=",
+                "value": "'123456'"
+            },
+            {
+                "column": "reference_time",
+                "operator": "=",
+                "value": "'2022-01-01 00:00'"
+            },
+            {
+                "column": "lead_time",
+                "operator": "<=",
+                "value": "'10 days'"
+            }
+        ]
     """
+
+    if filters == None:
+        filters = []
+  
+    jtq = JoinedTimeseriesQuery.parse_obj(
+        {
+            "primary_filepath": primary_filepath,
+            "secondary_filepath": secondary_filepath,
+            "crosswalk_filepath": crosswalk_filepath,
+            "order_by": order_by,
+            "filters": filters,
+            "return_query": return_query,
+            "include_geometry": include_geometry,
+            "geometry_filepath": geometry_filepath
+        }
+    )
+
+    if jtq.include_geometry:
+        if "geometry" not in jtq.group_by:
+            jtq.group_by.append("geometry")
     
     query =  f"""
         WITH joined as (
             SELECT 
                 sf.reference_time,
                 sf.value_time,
-                sf.catchment_id,   
+                sf.location_id as secondary_location_id,   
                 sf.value as secondary_value, 
                 sf.configuration,  
                 sf.measurement_unit,     
                 sf.variable_name,
                 pf.value as primary_value,
+                pf.location_id as primary_location_id, 
                 sf.value_time - sf.reference_time as lead_time
-            FROM '{secondary_dir}/*.parquet' sf 
-            JOIN '{primary_dir}/*.parquet' pf 
-                on pf.catchment_id = sf.catchment_id
+                {generate_geometry_select_clause(jtq)}
+            FROM '{str(jtq.secondary_filepath)}' sf 
+            JOIN '{str(jtq.crosswalk_filepath)}' cf
+                on cf.secondary_location_id = sf.location_id 
+            JOIN '{str(jtq.primary_filepath)}' pf 
+                on cf.primary_location_id = pf.location_id 
                 and sf.value_time = pf.value_time 
                 and sf.measurement_unit = pf.measurement_unit
                 and sf.variable_name = pf.variable_name
+            {generate_geometry_join_clause(jtq)}
         )
-        SELECT 
-            {",".join(group_by)},
-            regr_intercept(secondary_value, primary_value) as intercept,
-            covar_pop(secondary_value, primary_value) as covariance,
-            corr(secondary_value, primary_value) as corr,
-            regr_r2(secondary_value, primary_value) as r_squared,
-            count(secondary_value) as secondary_count,
-            count(primary_value) as primary_count,
-            avg(secondary_value) as secondary_average,
-            avg(primary_value) as primary_average,
-            var_pop(secondary_value) as secondary_variance,
-            var_pop(primary_value) as primary_variance,
-            max(secondary_value) - max(primary_value) as max_secondary_delta,
-            sum(primary_value - secondary_value)/count(*) as bias
-        FROM
+        SELECT * FROM
             joined
-        WHERE 
-            {" AND ".join(format_filters(filters))}
-        GROUP BY
-            {",".join(group_by)}
+        {format_filters(jtq.filters)}
         ORDER BY 
-            {",".join(order_by)}
+            {",".join(jtq.order_by)}
     ;"""
-    return query
+
+    if jtq.return_query:
+        return query
+    
+    df = duckdb.query(query).to_df()
+
+    df["primary_location_id"] = df["primary_location_id"].astype("category")
+    df["secondary_location_id"] = df["secondary_location_id"].astype("category")
+    df["configuration"] = df["configuration"].astype("category")
+    df["measurement_unit"] = df["measurement_unit"].astype("category")
+    df["variable_name"] = df["variable_name"].astype("category")
+
+    if jtq.include_geometry:
+        df["geometry"] = gpd.GeoSeries.from_wkt(df["geometry"])
+        return gpd.GeoDataFrame(df, crs="EPSG:4326", geometry="geometry")
+    
+    return df
 
 
-def get_joined_catchment_timeseries(
-    secondary_dir: str,
-    primary_dir: str, 
-    filters: List[dict]
-) -> str:
-    """Generate a metrics query
-    
-    filters = [
-        {
-            "column": "nwm_feature_id",
-            "operator": "=",
-            "value": "'123456'"
-        },
-        {
-            "column": "reference_time",
-            "operator": "=",
-            "value": "'2022-01-01 00:00'"
-        },
-        {
-            "column": "lead_time",
-            "operator": "<=",
-            "value": "'10 days'"
-        }
-    ]
-    
-    """
-    
-    query =  f"""
-        WITH joined as (
-            SELECT 
-                sf.reference_time,
-                sf.value_time,
-                sf.catchment_id,   
-                sf.value as secondary_value, 
-                sf.configuration,  
-                sf.measurement_unit,     
-                sf.variable_name,
-                pf.value as primary_value,
-                sf.value_time - sf.reference_time as lead_time
-            FROM '{secondary_dir}/*.parquet' sf 
-            JOIN '{primary_dir}/*.parquet' pf 
-                on pf.catchment_id = sf.catchment_id
-                and sf.value_time = pf.value_time 
-                and sf.measurement_unit = pf.measurement_unit
-                and sf.variable_name = pf.variable_name
-        )
-        SELECT 
-            *
-        FROM
-            joined
-        WHERE 
-            {" AND ".join(format_filters(filters))}
-    ;"""
-    return query
+def get_timeseries(
+    filepath: str,
+    order_by: List[str], 
+    filters: Union[List[dict], None] = None,
+    return_query: bool = True,
+    geometry_filepath: Union[str, None] = None,
+    include_geometry: bool = False,
+) -> Union[str, pd.DataFrame, gpd.GeoDataFrame]:
+    pass

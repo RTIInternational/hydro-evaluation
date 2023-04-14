@@ -2,18 +2,18 @@ from datetime import datetime
 
 import pandas as pd
 import pytest
-from models import MetricFilter
+from models import Filter
 from pydantic import ValidationError
 from queries import queries
 
 
 def test_multiple_filters():
-    filter_1 = MetricFilter(
+    filter_1 = Filter(
         column="secondary_location_id", 
         operator="in", 
         value=["123456", "9876543"]
     )
-    filter_2 = MetricFilter(
+    filter_2 = Filter(
         column="reference_time", 
         operator="=", 
         value=datetime(2023, 1, 1, 0, 0, 0)
