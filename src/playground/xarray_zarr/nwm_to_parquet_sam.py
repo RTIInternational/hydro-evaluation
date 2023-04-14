@@ -1,5 +1,4 @@
 import os
-from datetime import datetime, timedelta
 import time
 
 import fsspec
@@ -8,16 +7,11 @@ from kerchunk.hdf import SingleHdf5ToZarr
 from kerchunk.combine import MultiZarrToZarr
 import xarray as xr
 import dask
-from dask.distributed import Client
 import pandas as pd
 import numpy as np
 
 
 t0 = time.time()
-
-# TODO: Do this in the notebook instead??
-# Start up a local dask cluster
-# client = Client()
 
 
 def gen_json(u: str, fs: fsspec.filesystem, json_dir: str) -> str:
@@ -183,7 +177,7 @@ def fetch_nwm(
             columns={
                 "streamflow": "value",
                 "time": "value_time",
-                "nwm_feature_id": "location_id",
+                "feature_id": "location_id",
             },
             inplace=True,
         )
@@ -193,11 +187,11 @@ def fetch_nwm(
         df_temp["lead_time"] = df_temp["value_time"] - df_temp["reference_time"]
         df_temp["configuration"] = configuration
         df_temp["variable_name"] = variable_name
-        df_temp["location_id"] = df_temp.nwm_feature_id.astype(int)
+        df_temp["location_id"] = df_temp.location_id.astype(int)
         ref_time_str = pd.to_datetime(ref_time).strftime("%Y%m%dT%HZ")
         # Save to parquet
         parquet_filepath = os.path.join(
-            output_parquet_dir, f"{ref_time_str}_sam.parquet"
+            output_parquet_dir, f"{ref_time_str}.parquet"
         )
         df_temp.to_parquet(parquet_filepath)
 
@@ -266,13 +260,6 @@ def nwm_to_parquet(
         variable_name,
         output_parquet_dir,
     )
-    print(f"Did all the rest in: {(time.time() - t1)/60:.2f} mins")
+    print(f"Fetched data and saved to parquet in: {(time.time() - t1)/60:.2f} mins")
 
     print(f"Total elapsed: {(time.time() - t0)/60:.2f} mins")
-
-
-# if __name__ == "__main__":
-#     t0 = time.time()
-
-#     # Start up a local dask cluster
-#     client = Client()
