@@ -176,9 +176,9 @@ def get_metrics(
     crosswalk_filepath : str
         File path to single crosswalk file.
     group_by : List[str]
-        List of column/field names to group timeseries data by.
+        List of column/field names to group timeseries data by.  Must provide at least one.
     order_by : List[str]
-        List of column/field names to order results by.
+        List of column/field names to order results by. Must provide at least one.
     filters : Union[List[dict], None] = None
         List of dictionaries describing the "where" clause to limit data that 
         is included in metrics.
@@ -322,7 +322,7 @@ def get_joined_timeseries(
     crosswalk_filepath : str
         File path to single crosswalk file.
     order_by : List[str]
-        List of column/field names to order results by.
+        List of column/field names to order results by. Must provide at least one.
     filters : Union[List[dict], None] = None
         List of dictionaries describing the "where" clause to limit data that 
         is included in metrics.

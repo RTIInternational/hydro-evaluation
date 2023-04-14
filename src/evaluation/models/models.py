@@ -95,6 +95,20 @@ class MetricQuery(BaseModel):
             raise ValueError("group_by contains `geometry` field but `include_geometry` is False, must be True")
     
         return v
+    
+    @validator('order_by')
+    def must_include_one_order_by(cls, v, values):
+        if len(v) < 1:
+            raise ValueError("order_by must contain at least one field name.")
+
+        return v
+    
+    @validator('group_by')
+    def must_include_one_group_by(cls, v, values):
+        if len(v) < 1:
+            raise ValueError("group_by must contain at least one field name.")
+
+        return v
 
     
 class JoinedTimeseriesQuery(BaseModel):
@@ -112,4 +126,11 @@ class JoinedTimeseriesQuery(BaseModel):
         if v == True and not values["geometry_filepath"]:
             raise ValueError("`geometry_filepath` must be provided to include geometry in returned data")
     
+        return v
+    
+    @validator('order_by')
+    def must_include_one_order_by(cls, v, values):
+        if len(v) < 1:
+            raise ValueError("order_by must contain at least one field name.")
+
         return v
