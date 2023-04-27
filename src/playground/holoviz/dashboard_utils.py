@@ -17,24 +17,27 @@ import pathlib
 import holoviews as hv
 
 '''
-data processing and misc utilities for TEEHR dashboards
-'''
-
+misc utilities for TEEHR dashboards
+''' 
+    
 def get_comparison_metrics(
     primary_filepath: pathlib.Path,
     secondary_filepath: pathlib.Path,
     crosswalk_filepath: pathlib.Path,
     geometry_filepath: Union[pathlib.Path, None] = None,
-    single_reference_time: Union[pd.Timestamp, None] = None,
-    start_reference_time: Union[pd.Timestamp, None] = None,
-    end_reference_time: Union[pd.Timestamp, None] = None,
-    start_value_time: Union[pd.Timestamp, None] = None,
-    end_value_time: Union[pd.Timestamp, None] = None,
-    location_like: Union[str, None] = None,
+    reference_time_single: Union[pd.Timestamp, None] = None,
+    reference_time_start: Union[pd.Timestamp, None] = None,
+    reference_time_end: Union[pd.Timestamp, None] = None,
+    value_time_start: Union[pd.Timestamp, None] = None,
+    value_time_end: Union[pd.Timestamp, None] = None,
+    location_like: Union[str, List[str], None] = None,
     query_value_min: Union[float, None] = None,
     query_value_max: Union[float, None] = None,
 ) -> Union[str, pd.DataFrame, gpd.GeoDataFrame]:
 
+    # start message
+    print('Executing TEEHR query...')
+    
     # set the geometry flag
     geom_flag = True
     if geometry_filepath == None:
@@ -48,54 +51,54 @@ def get_comparison_metrics(
     # build the filters
     
     # reference times
-    if single_reference_time != None:
+    if reference_time_single != None:
         group_by_list = group_by_list + ["reference_time"]
         order_by_list = order_by_list + ["reference_time"]
         filters.append(
             {
                 "column": "reference_time",
                 "operator": "=",
-                "value": f"{single_reference_time}"
+                "value": f"{reference_time_single}"
             }
         )
-    elif start_reference_time != None:
+    elif reference_time_start != None:
         group_by_list = group_by_list + ["reference_time"]
         order_by_list = order_by_list + ["reference_time"]
         filters.append(
             {
                 "column": "reference_time",
                 "operator": ">=",
-                "value": f"{start_reference_time}"
+                "value": f"{reference_time_start}"
             }
         )
-        if end_reference_time != None:
+        if reference_time_end != None:
             filters.append(
                 {
                     "column": "reference_time",
                     "operator": "<=",
-                    "value": f"{end_reference_time}"
+                    "value": f"{reference_time_end}"
                 } 
             )
         else:             
             print('set up an error catch here')
         
     # value times
-    if start_value_time != None:
-        group_by_list = group_by_list + ["value_time"]
-        order_by_list = order_by_list + ["value_time"]
+    if value_time_start != None:
+        group_by_list = group_by_list
+        order_by_list = order_by_list
         filters.append(
             {
                 "column": "value_time",
                 "operator": ">=",
-                "value": f"{start_value_time}"
+                "value": f"{value_time_start}"
             }
         )
-        if end_value_time != None:
+        if value_time_end != None:
             filters.append(
                 {
                     "column": "value_time",
                     "operator": "<=",
-                    "value": f"{end_value_time}"
+                    "value": f"{value_time_end}"
                 } 
             )
         else:             
@@ -103,11 +106,13 @@ def get_comparison_metrics(
 
     # location
     if location_like != None:
-        group_by_list = group_by_list + ["primary_location_id"]
-        order_by_list = order_by_list + ["primary_location_id"]
+        # if type(location_like) == str:
+        #     location_like = [location_like
+        group_by_list = group_by_list
+        order_by_list = order_by_list
         filters.append(
             {
-                "column": f"{primary_location_id}",
+                "column": "primary_location_id",
                 "operator": "like",
                 "value": f"{location_like}%"
             }
@@ -156,33 +161,60 @@ def get_comparison_metrics(
         return_query=False,
         geometry_filepath=geometry_filepath,       
         include_geometry=geom_flag,
-    )            
-        
-    return gdf 
-
-
-def merge_df_with_gdf(
-    gdf, 
-    geom_id_header: str, 
-    df,
-    location_id_header: str, 
-) -> gpd.GeoDataFrame:
-    '''
-    merge data df (result of DDB query) with geometry, return a geodataframe
-    '''
-    # merge df with geodataframe
-    merged_gdf = gdf.merge(df, left_on=geom_id_header, right_on=location_id_header)    
-
-    # if IDs are HUC codes, convert to type 'category'
-    if any(s in location_id_header for s in ["HUC","huc"]):
-        print(f"converting column {location_id_header} to category")
-        merged_gdf[location_id_header] = merged_gdf[location_id_header].astype("category")
+    )         
     
-    return merged_gdf
+    if type(gdf) in [gpd.GeoDataFrame, pd.DataFrame]:
+        print(f"TEEHR query complete for {gdf['primary_location_id'].nunique()} locations and {gdf['reference_time'].nunique()} forecast reference times")
+        
+    return gdf
 
-def get_parquet_date_range(source) -> pd.Timestamp:
+def run_query_from_widgets(
+    parquet_filelist: List[pathlib.Path],
+    variable_selector: Union[pn.widgets.Select, None] = None,                           
+    reference_time_slider: Union[pn.widgets.DateRangeSlider, None] = None,
+    value_time_slider: Union[pn.widgets.DateRangeSlider, None] = None,
+    region_selector: Union[pn.widgets.Select, None] = None,
+    min_value_input: Union[pn.widgets.FloatInput, None] = None,
+    max_value_input: Union[pn.widgets.FloatInput, None] = None
+):
+                                                    
+    if variable_selector != None:
+        filelist = parquet_filelist[variable_selector.options.index(variable_selector.value)]
+    else:
+        filelist = parquet_filelist
+        
+    # print(filelist[0])
+    # print(filelist[1])
+    # print(filelist[2])
+    # print(filelist[3])
+    # print(reference_time_slider.value_start)
+    # print(reference_time_slider.value_end)
+    # print(value_time_slider.value_start)
+    # print(value_time_slider.value_end)
+    # print(min_value_input.value)
+    # print(max_value_input.value)
+
+    # metric query wrapper
+    gdf = get_comparison_metrics(
+        primary_filepath=filelist[0],
+        secondary_filepath=filelist[1],
+        crosswalk_filepath=filelist[2],
+        geometry_filepath=filelist[3],
+        reference_time_start=reference_time_slider.value_start,    
+        reference_time_end=reference_time_slider.value_end,
+        #location_like=usgs_list_sub,
+        value_time_start=value_time_slider.value_start,    
+        value_time_end=value_time_slider.value_end,
+        query_value_min=min_value_input.value,
+        query_value_max=max_value_input.value,
+    )
+                
+    return gdf
+
+
+def get_parquet_value_time_range(source) -> List[pd.Timestamp]:
     '''
-    Query parquet files for defined fileset (source) and
+    Query parquet files for defined fileset (source directory) and
     return the min/max value_times in the files
     '''    
     query = f"""
@@ -192,34 +224,117 @@ def get_parquet_date_range(source) -> pd.Timestamp:
         FROM read_parquet('{source}')
     ;"""
     df = ddb.query(query).to_df()
-    return df.start_time[0], df.end_time[0]
+    return [df.start_time[0], df.end_time[0]]
 
+def get_parquet_reference_time_range(source: pathlib.Path) -> List[pd.Timestamp]:
+    '''
+    Query parquet files for defined fileset (source directory) and
+    return the min/max reference times in the files
+    '''    
+    query = f"""
+        SELECT count(distinct(reference_time)) as count,
+        min(reference_time) as start_time,
+        max(reference_time) as end_time
+        FROM read_parquet('{source}')
+    ;"""
+    df = ddb.query(query).to_df()
+    return [df.start_time[0], df.end_time[0]] 
+                              
 
-def get_parquet_date_range_across_sources(source_list) -> pd.Timestamp:
-    for source in source_list:
-        source_start_date, source_end_date = get_parquet_date_range(source)
-        if source == source_list[0]:
+def get_parquet_date_range_across_sources(
+    parquet_filelist: List[pathlib.Path],
+    date_type: str,
+) -> List[pd.Timestamp]:
+        
+    parquet_timeseries_files = []
+    if type(parquet_filelist[0]) == list:
+        for filelist in parquet_filelist:
+            parquet_timeseries_files = parquet_timeseries_files + filelist[:2]
+    else:
+        parquet_timeseries_files = parquet_filelist[:2]
+        
+    print(f"Checking {date_type} range in the parquet files")    
+      
+    for source in parquet_timeseries_files:
+        
+        if date_type == "reference_time":
+            [source_start_date, source_end_date] = get_parquet_reference_time_range(source)
+        else:
+            [source_start_date, source_end_date] = get_parquet_value_time_range(source)            
+            
+        if source == parquet_timeseries_files[0]:
             start_date = source_start_date
             end_date = source_end_date
         else:
-            if source_start_date > start_date:
+            if type(source_start_date) == pd.Timestamp and type(start_date) == pd.Timestamp:
+                if source_start_date > start_date:
+                    start_date = source_start_date
+            elif type(source_start_date) == pd.Timestamp and type(start_date) != pd.Timestamp:
                 start_date = source_start_date
-            if source_end_date < end_date:
+                
+            if type(source_end_date) == pd.Timestamp and type(end_date) == pd.Timestamp:                    
+                if source_end_date < end_date:
+                    end_date = source_end_date
+            elif type(source_end_date) == pd.Timestamp and type(end_date) != pd.Timestamp:
                 end_date = source_end_date
-    return start_date, end_date
+                
+    return [start_date, end_date]
+
+def get_date_range_slider(
+    parquet_filelist: List[pathlib.Path],
+    # start_date: pd.Timestamp, 
+    # end_date: pd.Timestamp, 
+    date_type: str,
+    opts: dict = {}
+) -> pn.Column:
+    '''
+    Date range slider to select start and end dates of the event
+    '''
+    
+    if type(parquet_filelist[0]) != list:
+        parquet_filelist = [parquet_filelist]
+    
+    if date_type == "reference_time":
+        range_start, range_end = get_parquet_date_range_across_sources(parquet_filelist, date_type = "reference_time")  
+        value_end = range_start+timedelta(days=10)
+    else:
+        range_start, range_end = get_parquet_date_range_across_sources(parquet_filelist, date_type = "value_time")  
+        value_end = range_end
+        
+    dates_text = get_minmax_dates_text(range_start, range_end, date_type)
+    dates_slider = pn.widgets.DatetimeRangeSlider(
+        name='Selected start/end dates for evaluation',
+        start=range_start, 
+        end=range_end,
+        value=(range_start, value_end),
+        **opts,
+    )
+    return pn.Column(dates_text, dates_slider)
 
 
-def get_reference_times():
+def get_minmax_dates_text(
+    min_date: pd.Timestamp, 
+    max_date: pd.Timestamp,
+    date_type: str,
+    opts: dict = {},
+) -> pn.pane:
+    return pn.pane.HTML(f"Range of {date_type} available in cache: {min_date} - {max_date}", 
+                        sizing_mode = "stretch_width",
+                        style={'font-size': '15px', 'font-weight': 'bold'})
+
+    
+def get_parquet_reference_time_list(source: pathlib.Path) -> List[pd.Timestamp]:
     query = f"""select distinct(reference_time)as time
-        from '{config.MEDIUM_RANGE_FORCING_PARQUET}/*.parquet'
+        from '{source}'
         order by reference_time asc"""
     df = ddb.query(query).to_df()
     times = df.time.tolist()
     return times
 
-
-
-def combine_attributes(filelist, viz_units):
+def combine_attributes(
+    filelist: List[pathlib.Path], 
+    viz_units: str
+) -> pd.DataFrame:
     
     # note that any locations NOT included in all selected attribute tables will be excluded
     for file in filelist:
@@ -251,7 +366,11 @@ def merge_attr_to_gdf(
     
     return gdf
     
-def convert_area_to_ft2(units: str, values: pd.Series) -> pd.Series:
+def convert_area_to_ft2(
+    units: str, 
+    values: pd.Series
+) -> pd.Series:
+    
     if units in ['km2','sqkm','km**2','km^2']:
         converted_values = values * (1000**2) * (3.28**2)
     elif units in ['m2','sqm','m**2','m^2']:
@@ -260,9 +379,14 @@ def convert_area_to_ft2(units: str, values: pd.Series) -> pd.Series:
         converted_values = values * (5280**2)
     elif units in ['ft2','sqft','ft**2','ft^2']:
         converted_values = values
+        
     return converted_values
 
-def convert_area_to_mi2(units: str, values: pd.Series) -> pd.Series:
+def convert_area_to_mi2(
+    units: str, 
+    values: pd.Series
+) -> pd.Series:
+    
     if units in ['km2','sqkm','km**2','km^2']:
         converted_values = values * (1000**2) * (3.28**2) / (5280**2)
     elif units in ['m2','sqm','m**2','m^2']:
@@ -271,16 +395,26 @@ def convert_area_to_mi2(units: str, values: pd.Series) -> pd.Series:
         converted_values = values / (5280**2)
     elif units in ['mi2','sqmi','mi**2','mi^2']:
         converted_values = values
+        
     return converted_values
     
-def convert_flow_to_cfs(units: str, values: pd.Series) -> pd.Series:
+def convert_flow_to_cfs(
+    units: str, 
+    values: pd.Series
+) -> pd.Series:
+    
     if units in ['cms','m3/s']:
         converted_values = values * (3.28**3)
     elif units in ['cfs','ft3/s']:
         converted_values = values
+        
     return converted_values 
 
-def convert_area_to_m2(units: str, values: pd.Series) -> pd.Series:
+def convert_area_to_m2(
+    units: str, 
+    values: pd.Series
+) -> pd.Series:
+    
     if units in ['mi2','sqmi','mi**2','mi^2']:
         converted_values = values * (5280**2) / (3.28**2)
     elif units in ['ft2','sqft','ft**2','ft^2']:
@@ -289,9 +423,14 @@ def convert_area_to_m2(units: str, values: pd.Series) -> pd.Series:
         converted_values = values * (1000**2)
     elif units in ['m2','sqm','m**2','m^2']:
         converted_values = values
+        
     return converted_values
 
-def convert_area_to_km2(units: str, values: pd.Series) -> pd.Series:
+def convert_area_to_km2(
+    units: str, 
+    values: pd.Series,
+) -> pd.Series:
+    
     if units in ['mi2','sqmi','mi**2','mi^2']:
         converted_values = values * (5280**2) / (3.28**2) / (1000**2)
     elif units in ['ft2','sqft','ft**2','ft^2']:
@@ -300,9 +439,14 @@ def convert_area_to_km2(units: str, values: pd.Series) -> pd.Series:
         converted_values = values / (1000**2)        
     elif units in ['km2','sqkm','km**2','km^2']:
         converted_values = values
+        
     return converted_values
     
-def convert_flow_to_cms(units: str, values: pd.Series) -> pd.Series:
+def convert_flow_to_cms(
+    units: str, 
+    values: pd.Series,
+) -> pd.Series:
+    
     if units in ['cfs','ft3/s']:
         converted_values = values / (3.28**3)
     elif units in ['cms','m3/s']:
@@ -310,7 +454,10 @@ def convert_flow_to_cms(units: str, values: pd.Series) -> pd.Series:
     return converted_values 
 
         
-def convert_metrics_to_viz_units(gdf: gpd.GeoDataFrame, viz_units: 'str') -> gpd.GeoDataFrame:
+def convert_metrics_to_viz_units(
+    gdf: gpd.GeoDataFrame, 
+    viz_units: 'str',
+) -> gpd.GeoDataFrame:
     
     measurement_unit = gdf['measurement_unit'][0]
     if viz_units == 'english':
@@ -328,7 +475,10 @@ def convert_metrics_to_viz_units(gdf: gpd.GeoDataFrame, viz_units: 'str') -> gpd
     return gdf
                     
     
-def convert_attr_to_viz_units(df: pd.DataFrame, viz_units: 'str') -> pd.DataFrame:
+def convert_attr_to_viz_units(
+    df: pd.DataFrame, 
+    viz_units: 'str',
+) -> pd.DataFrame:
     
     attr_units = df['attribute_units'][0]
     attr_name = df['attribute_name'][0]
@@ -354,35 +504,16 @@ def convert_attr_to_viz_units(df: pd.DataFrame, viz_units: 'str') -> pd.DataFram
 
 ########## Widgets for dashboards
 
-def get_event_date_range_slider(start_date, end_date, opts = {}):  
-    '''
-    Date range slider to select start and end dates of the event
-    '''
-    event_dates_slider = pn.widgets.DatetimeRangeSlider(
-        name='Selected event start/end dates',
-        start=start_date, 
-        end=end_date,
-        value=(start_date, end_date),
-        step=1000*60*60,
-        bar_color = "green",
-        width_policy="fit",
-        **opts,
-    )
-    return event_dates_slider
 
 
-def get_event_dates_text(min_date, max_date):
-    return pn.pane.HTML(f"Min/Max event dates available: {min_date} - {max_date}", 
-                        sizing_mode = "stretch_width", 
-                        style={'font-size': '15px', 'font-weight': 'bold'})
 
 
-def get_huc2_selector():
+def get_huc2_selector() -> pn.widgets:
     '''
     HUC2 region to explore, enables smaller region for faster responsiveness
     '''
     hucs=[
-        "all",
+        "ALL",
         "01",
         "02",
         "03",
@@ -402,9 +533,13 @@ def get_huc2_selector():
         "17",
         "18",
     ]
-    huc2_selector = pn.widgets.Select(name='HUC2', options=hucs, value="all", width_policy="fit")
+    huc2_selector = pn.widgets.Select(name='HUC-2 Subregion', options=hucs, value="all", width_policy="fit")
     return huc2_selector       
 
+def get_variable_selector(variable_list):
+    variable_selector = pn.widgets.Select(name='Evaluation variable', options=variable_list, value=variable_list[0], width_policy="fit")
+    return variable_selector
+    
 
 def get_precip_char_measure_selector():
     measures = [
@@ -459,3 +594,23 @@ def get_reference_time(reference_time):
     return pn.pane.HTML(f"Current Reference Time:   {reference_time}", 
                         sizing_mode = "stretch_width", 
                         style={'font-size': '15px', 'font-weight': 'bold'})
+
+
+def merge_df_with_gdf(
+    gdf, 
+    geom_id_header: str, 
+    df,
+    location_id_header: str, 
+) -> gpd.GeoDataFrame:
+    '''
+    merge data df (result of DDB query) with geometry, return a geodataframe
+    '''
+    # merge df with geodataframe
+    merged_gdf = gdf.merge(df, left_on=geom_id_header, right_on=location_id_header)    
+
+    # if IDs are HUC codes, convert to type 'category'
+    if any(s in location_id_header for s in ["HUC","huc"]):
+        print(f"converting column {location_id_header} to category")
+        merged_gdf[location_id_header] = merged_gdf[location_id_header].astype("category")
+    
+    return merged_gdf
