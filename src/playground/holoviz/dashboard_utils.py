@@ -3,9 +3,11 @@ sys.path.insert(0, '../../')
 sys.path.insert(0, '../../evaluation/')
 
 import teehr.queries.duckdb as tqd
+import teehr.queries.utils as tqu
 import duckdb as ddb
 import temp_queries
 import pandas as pd
+import spatialpandas as spd
 import panel as pn
 import geopandas as gpd
 import numpy as np
@@ -13,8 +15,12 @@ from datetime import datetime, timedelta
 from evaluation import utils, config
 from typing import List, Union
 from pathlib import Path
-
 import holoviews as hv
+import geoviews as gv
+import cartopy.crs as ccrs
+import colorcet as cc
+import datashader as ds
+from bokeh.models import Range1d, LinearAxis
 
 '''
 misc utilities for TEEHR dashboards
@@ -22,10 +28,7 @@ misc utilities for TEEHR dashboards
     
 def run_teehr_query(
     query_type: str,
-    primary_filepath: Path,
-    secondary_filepath: Path,
-    crosswalk_filepath: Path,
-    geometry_filepath: Union[Path, None] = None,
+    scenario: dict,
     location_id: Union[str, List[str], None] = None,    
     huc_id: Union[str, List[str], None] = None,
     order_limit: Union[int, None] = None,
@@ -41,15 +44,26 @@ def run_teehr_query(
     order_by: Union[List[str], None] = None,
     attribute_paths: Union[List[Path], None] = None,
     return_query: Union[bool, None] = False,
+    include_geometry: Union[bool, None] = None,
 ) -> Union[str, pd.DataFrame, gpd.GeoDataFrame]:
 
-    # start message
-    print(f"Executing TEEHR {query_type} query...")
+    # start message - remove for now, figure out how to check if it was run by interaction
+    #print(f"Executing TEEHR {query_type} query...")
     
-    # set the geometry flag
-    geom_flag = True
-    if geometry_filepath is None:
-        geom_flag = False
+    primary_filepath=scenario["primary_filepath"]
+    secondary_filepath=scenario["secondary_filepath"]
+    crosswalk_filepath=scenario["crosswalk_filepath"]
+    
+    if "geometry_filepath" in scenario.keys():
+        geometry_filepath=scenario["geometry_filepath"]
+    else:
+        geometry_filepath=None
+        
+    if include_geometry is None:
+        if geometry_filepath is None:
+            include_geometry = False
+        else:
+            include_geometry = True
         
     # initialize group_by and order_by lists
     if group_by is None:
@@ -57,6 +71,7 @@ def run_teehr_query(
     else:
         group_by.extend(["primary_location_id","measurement_unit"])
         group_by = list(set(group_by))
+        
     if order_by is None:
         order_by=["primary_location_id"]
 
@@ -174,9 +189,7 @@ def run_teehr_query(
             )
         else:             
             print('set up an error catch here')        
-                        
-                        
-        
+
     # min/max values --  ***  will eventually need to allow requiring one or other (primary or secondary) to be above threshold
     #                         for recurrence flows, threshold is different at every location, future work to add this to queries 
     if value_min is not None:  
@@ -226,7 +239,7 @@ def run_teehr_query(
             filters=filters,
             return_query=return_query,
             geometry_filepath=geometry_filepath,       
-            include_geometry=geom_flag,
+            include_geometry=include_geometry,
             include_metrics=include_metrics,
         )    
         
@@ -240,14 +253,18 @@ def run_teehr_query(
             filters=filters,
             return_query=return_query,
             geometry_filepath=geometry_filepath,       
-            include_geometry=geom_flag,
+            include_geometry=include_geometry,
         )         
     
-    if type(gdf) in [gpd.GeoDataFrame, pd.DataFrame]:
-        print(f"TEEHR query complete for {gdf['primary_location_id'].nunique()} locations")
-        # and {gdf['reference_time'].nunique()} forecast reference times")
-        
+    # if type(gdf) in [gpd.GeoDataFrame, pd.DataFrame]:
+    #     reftext = ""
+    #     if "reference_time" in gdf.columns:
+    #         reftext = f"and {gdf['reference_time'].nunique()} forecast reference times"
+    #     print(f"TEEHR query complete for {gdf['primary_location_id'].nunique()} locations {reftext}")
+
     return gdf
+
+
 
 
 ################################## get info about the parquet files
@@ -291,6 +308,31 @@ def get_parquet_date_range_across_scenarios(
     return [start_date, end_date]
 
 
+def get_parquet_date_list_across_scenarios(
+    pathlist: List[Path] = [],
+    date_type: str = "value_time",
+) -> List[pd.Timestamp]:
+        
+    print(f"Getting list of {date_type}s in the parquet files")   
+    
+    date_list = []
+    for source in pathlist:
+
+        if date_type == "reference_time":
+            source_times = get_parquet_reference_time_list(source)
+        elif date_type == "value_time":
+            source_times = get_parquet_value_time_list(source)            
+        else:
+            print('add error catch')
+
+        if source_times is not None:
+            if len(date_list) == 0:
+                date_list = source_times
+            else:
+                date_list = sorted(list(set(date_list).intersection(source_times)))
+    return date_list
+
+
 def get_parquet_value_time_range(source) -> List[pd.Timestamp]:
     '''
     Query parquet files for defined fileset (source directory) and
@@ -329,9 +371,23 @@ def get_parquet_reference_time_list(
         from '{source}'
         order by reference_time asc"""
     df = ddb.query(query).to_df()
-    times = df.time.tolist()
-    return times
-                              
+    if any(df.time.notnull()):
+        return df.time.tolist()
+    else:
+        return None
+    
+def get_parquet_value_time_list(
+    source: Path
+) -> List[pd.Timestamp]:
+    
+    query = f"""select distinct(value_time)as time
+        from '{source}'
+        order by value_time asc"""
+    df = ddb.query(query).to_df()
+    if any(df.time.notnull()):
+        return df.time.tolist()
+    else:
+        return None
 
 ########### get info from inputs - location subset and scenario stuff
 
@@ -443,9 +499,87 @@ def get_parquet_pathlist_from_scenario(
 
 ################################################# widgets
 
-def get_filter_date_widgets(
+def get_reference_time_text(reference_time) -> pn.pane.HTML:
+    return pn.pane.HTML(f"Current Reference Time:   {reference_time}", 
+                        sizing_mode = "stretch_width", 
+                        style={'font-size': '15px', 'font-weight': 'bold'})
+
+
+def get_reference_time_player_all_dates(
     scenario: Union[dict, List[dict]] = {},
-) -> List:
+    opts: dict = {},
+) -> pn.Column:
+    
+    if type(scenario) is list:
+        pathlist = []
+        for scenario_i in scenario:
+            pathlist.extend([scenario_i["primary_filepath"], scenario_i["secondary_filepath"]])
+    else:
+        pathlist = [scenario["primary_filepath"], scenario["secondary_filepath"]]
+        
+    reference_times = get_parquet_date_list_across_scenarios(pathlist, date_type = "reference_time")
+        
+    reference_time_player = pn.widgets.DiscretePlayer(name='Discrete Player', 
+                                                      options=list(reference_times), 
+                                                      value=reference_times[0], 
+                                                      interval=5000)   
+    return reference_time_player
+
+
+def get_reference_time_player_selected_dates(
+    scenario: Union[dict, List[dict]] = {},
+    start: pd.Timestamp = None,
+    end: pd.Timestamp = None,
+    opts: dict = {},
+) -> pn.widgets.DiscretePlayer:
+    
+    if type(scenario) is list:
+        pathlist = []
+        for scenario_i in scenario:
+            pathlist.extend([scenario_i["primary_filepath"], scenario_i["secondary_filepath"]])
+    else:
+        pathlist = [scenario["primary_filepath"], scenario["secondary_filepath"]]
+        
+    reference_times = get_parquet_date_list_across_scenarios(pathlist, date_type = "reference_time")
+
+    reference_times_in_event = [t for t in reference_times if t >= start and t <= end]
+    reference_time_player = pn.widgets.DiscretePlayer(name='Discrete Player', 
+                                                      options=list(reference_times_in_event), 
+                                                      value=reference_times_in_event[0], 
+                                                      interval=5000,
+                                                      show_loop_controls = False,
+                                                      width_policy="fit",
+                                                      margin=0,
+                                                      **opts,
+                                                      )   
+    return reference_time_player
+
+
+
+def get_reference_time_slider(
+    scenario: Union[dict, List[dict]] = {},
+    opts: dict = dict(width = 700, bar_color = "red", step=3600000*6),
+) -> pn.Column:
+    
+    if type(scenario) is list:
+        pathlist = []
+        for scenario_i in scenario:
+            pathlist.extend([scenario_i["primary_filepath"], scenario_i["secondary_filepath"]])
+    else:
+        pathlist = [scenario["primary_filepath"], scenario["secondary_filepath"]]
+    
+    reference_time_slider = get_date_range_slider_with_range_as_title(
+        pathlist=pathlist,
+        date_type='reference_time',
+        opts = opts,
+    )   
+    return reference_time_slider
+
+
+def get_value_time_slider(
+    scenario: Union[dict, List[dict]] = {},
+    opts: dict = dict(width = 700, bar_color = "green", step=3600000),
+) -> pn.Column:
     
     if type(scenario) is list:
         pathlist = []
@@ -457,38 +591,9 @@ def get_filter_date_widgets(
     value_time_slider = get_date_range_slider_with_range_as_title(
         pathlist=pathlist,
         date_type='value_time', 
-        opts = dict(width = 700, bar_color = "green", step=3600000)
-    )
-    reference_time_slider = get_date_range_slider_with_range_as_title(
-        pathlist=pathlist,
-        date_type='reference_time',
-        opts = dict(width = 700, bar_color = "red", step=3600000*6)
-    )   
-    
-    return [value_time_slider, reference_time_slider]
-
-def get_filter_widgets(
-    scenario: dict = {},
-) -> List:
-    
-    value_time_slider = get_date_range_slider_with_range_as_title(
-        pathlist=[scenario["primary_filepath"], scenario["secondary_filepath"]],
-        date_type='value_time', 
-        opts = dict(width = 700, bar_color = "green", step=3600000)
-    )
-    reference_time_slider = get_date_range_slider_with_range_as_title(
-        pathlist=[scenario["primary_filepath"], scenario["secondary_filepath"]],
-        date_type='reference_time',
-        opts = dict(width = 700, bar_color = "red", step=3600000*6)
-    )
-
-    huc2_selector = get_huc2_selector()
-    order_limit_selector = get_order_limit_selector()
-    threshold_selector = get_threshold_selector(scenario['variable'])
-    metric_selector = get_metric_selector(scenario['variable'])    
-    
-    return [value_time_slider, reference_time_slider, huc2_selector, 
-            threshold_selector, order_limit_selector, metric_selector]
+        opts = opts,
+    )    
+    return value_time_slider
 
 def get_date_range_slider_with_range_as_title(
     pathlist: List[Path] = [],
@@ -637,41 +742,30 @@ def get_threshold_selector(variable: str = 'streamflow') -> pn.widgets.Select:
     
     return threshold_selector
 
+def get_filter_widgets(
+    scenario: dict = {},
+) -> List:
+    
+    value_time_slider = du.get_value_time_slider(scenario)
+    
+    value_time_slider = get_date_range_slider_with_range_as_title(
+        pathlist=[scenario["primary_filepath"], scenario["secondary_filepath"]],
+        date_type='value_time', 
+        opts = dict(width = 700, bar_color = "green", step=3600000)
+    )
+    reference_time_slider = get_date_range_slider_with_range_as_title(
+        pathlist=[scenario["primary_filepath"], scenario["secondary_filepath"]],
+        date_type='reference_time',
+        opts = dict(width = 700, bar_color = "red", step=3600000*6)
+    )
 
-def get_reference_time_player_all_dates() -> pn.widgets.Select:
-    reference_times = get_reference_times()
-    reference_time_player = pn.widgets.DiscretePlayer(name='Discrete Player', 
-                                                      options=list(reference_times), 
-                                                      value=reference_times[0], 
-                                                      interval=5000)   
-    return reference_time_player
-
-
-def get_reference_time_player_selected_dates(
-    start: pd.Timestamp = None,
-    end: pd.Timestamp = None,
-    opts: dict = {},
-) -> pn.widgets.DiscretePlayer:
-
-    reference_times = get_reference_times()
-    reference_times_in_event = [t for t in reference_times if t >= start and t <= end]
-    reference_time_player = pn.widgets.DiscretePlayer(name='Discrete Player', 
-                                                      options=list(reference_times_in_event), 
-                                                      value=reference_times_in_event[0], 
-                                                      interval=5000,
-                                                      show_loop_controls = False,
-                                                      width_policy="fit",
-                                                      **opts,
-                                                      )   
-    return reference_time_player
-
-
-def get_reference_time_text(reference_time) -> pn.pane.HTML:
-    return pn.pane.HTML(f"Current Reference Time:   {reference_time}", 
-                        sizing_mode = "stretch_width", 
-                        style={'font-size': '15px', 'font-weight': 'bold'})
-
-
+    huc2_selector = get_huc2_selector()
+    order_limit_selector = get_order_limit_selector()
+    threshold_selector = get_threshold_selector(scenario['variable'])
+    metric_selector = get_metric_selector(scenario['variable'])    
+    
+    return [value_time_slider, reference_time_slider, huc2_selector, 
+            threshold_selector, order_limit_selector, metric_selector]
 
 ##############################################  attributes
 
@@ -827,25 +921,88 @@ def convert_flow_to_cms(
         
     return converted_values 
 
+def convert_depth_to_mm(
+    units: str, 
+    values: pd.Series,
+) -> pd.Series:
+    
+    if units in ['in','inches','in/hr']:
+        converted_values = values * 25.4
+    elif units in ['ft','feet','ft/hr']:
+        converted_values = values * 12 * 25.4
+    elif units in ['cm','cm/hr']:
+        converted_values = values * 10
+    elif units in ['m','m/hr']:
+        converted_values = values * 1000
+    elif units in ['mm','mm/hr']:
+        converted_values = values        
+    return converted_values 
+
+def convert_depth_to_in(
+    units: str, 
+    values: pd.Series,
+) -> pd.Series:
+    
+    if units in ['in','inches','in/hr']:
+        converted_values = values
+    elif units in ['ft','feet','ft/hr']:
+        converted_values = values * 12
+    elif units in ['cm','cm/hr']:
+        converted_values = values / 2.54
+    elif units in ['m','m/hr']:
+        converted_values = values / .254
+    elif units in ['mm','mm/hr']:
+        converted_values = values / 25.4       
+    return converted_values 
+
         
 def convert_metrics_to_viz_units(
     gdf: gpd.GeoDataFrame, 
     viz_units: 'str',
+    variable: 'str',
 ) -> gpd.GeoDataFrame:
     
+    # need a metric library to look up units and ranges
+    
+    convert_columns = [
+        "bias",
+        "secondary_average",
+        "primary_average",
+        "secondary_minimum",
+        "primary_minimum",
+        "primary_maximum",
+        "secondary_maximum",
+        "max_value_delta",
+        "secondary_sum",
+        "primary_sum",
+        "secondary_variance",
+        "primary_variance"]
+    
     measurement_unit = gdf['measurement_unit'][0]
-    if viz_units == 'english':
-        for col in gdf.columns:
-            if col in ['primary_average','primary_max','primary_min','primary_sum',
-                       'secondary_average','secondary_max','secondary_min','secondary_sum']:
-                gdf[col] = convert_flow_to_cfs(measurement_unit, gdf[col])
-        gdf['measurement_unit'] = 'ft3/s'
-    elif viz_units == 'metric':
-        for col in gdf.columns:
-            if col.split("_")[0] in ['primary','secondary']:
-                gdf[col] = convert_flow_to_cms(measurement_unit, gdf[col])  
-        gdf['measurement_unit'] = 'm3/s'
-        
+    if variable in ['streamflow','flow','discharge']:
+        if viz_units == 'english':
+            for col in gdf.columns:
+                if col in convert_columns:
+                    gdf[col] = convert_flow_to_cfs(measurement_unit, gdf[col])
+            gdf['measurement_unit'] = 'ft3/s'
+        elif viz_units == 'metric':
+            for col in gdf.columns:
+                if col in convert_columns:
+                    gdf[col] = convert_flow_to_cms(measurement_unit, gdf[col])  
+            gdf['measurement_unit'] = 'm3/s'
+            
+    elif variable in ['precip','precipitation','precipitation_rate']:
+        if viz_units == 'english':
+            for col in gdf.columns:
+                if col in convert_columns:
+                    gdf[col] = convert_depth_to_in(measurement_unit, gdf[col])
+            gdf['measurement_unit'] = 'in/hr'
+        elif viz_units == 'metric':
+            for col in gdf.columns:
+                if col in convert_columns:
+                    gdf[col] = convert_depth_to_mm(measurement_unit, gdf[col])  
+            gdf['measurement_unit'] = 'mm/hr'        
+
     return gdf
                     
     
@@ -875,3 +1032,364 @@ def convert_attr_to_viz_units(
         
     return df
 
+def get_normalized_streamflow(
+    df: Union[pd.DataFrame, gpd.GeoDataFrame],
+    area_col: str = 'upstream_area_value',
+    include_metrics: Union[List[str], None] = None,
+    units: str = 'metric',
+) -> Union[pd.DataFrame, gpd.GeoDataFrame]:
+    
+    if include_metrics is None:
+        print('Metric list empty for normalization')
+        return df
+    else:
+        flow_metrics = get_flow_metrics(include_metrics)
+        if flow_metrics is not None:
+            for metric in flow_metrics:
+                norm_metric = '_'.join([metric, 'norm'])
+                if units == 'metric':
+                    df[norm_metric] = df[metric]/df[area_col]/(1000)*3600
+                else:
+                    df[norm_metric] = df[metric]/df[area_col]/(5280**2)*12*3600
+
+            return df
+
+def get_flow_metrics(metric_list: Union[List[str], None]) -> List[str]:
+
+    flow_metrics = [
+        "secondary_average",
+        "primary_average",
+        "secondary_minimum",
+        "primary_minimum",            
+        "primary_maximum",              
+        "secondary_maximum",    
+        "max_value_delta",                        
+        "secondary_sum",
+        "primary_sum",
+        "secondary_variance",
+        "primary_variance",
+    ]
+    if metric_list is not None:               
+        return [metric for metric in metric_list if metric in flow_metrics]
+
+
+####################### holoviews
+
+def get_aggregator(measure):
+    '''
+    datashader aggregator function
+    '''
+    return ds.mean(measure)
+
+
+def get_all_points(scenario: dict) -> hv.Points:
+
+    df = pd.read_parquet(scenario["geometry_filepath"])
+    gdf = tqu.df_to_gdf(df)
+    gdf['easting'] = gdf.geometry.x
+    gdf['northing'] = gdf.geometry.y
+    
+    return hv.Points(gdf, kdims = ['easting','northing'], vdims = ['id'])
+
+
+def build_hv_points_from_query(
+    scenario: dict,
+    location_id: Union[str, List[str], None] = None,    
+    huc_id: Union[str, List[str], None] = None,
+    order_limit: Union[int, None] = None,
+    value_time_start: Union[pd.Timestamp, None] = None,
+    value_time_end: Union[pd.Timestamp, None] = None,    
+    reference_time_single: Union[pd.Timestamp, None] = None,
+    reference_time_start: Union[pd.Timestamp, None] = None,
+    reference_time_end: Union[pd.Timestamp, None] = None,
+    value_min: Union[float, None] = None,
+    value_max: Union[float, None] = None,
+    group_by: Union[List[str], None] = None,
+    order_by: Union[List[str], None] = None,       
+    include_metrics: Union[List[str], None] = None,
+    metric_limits: Union[dict, None] = None,  
+    attribute_paths: Union[List[Path], None] = None,
+    units: str = "metric",
+) -> hv.Points:
+    
+    gdf = run_teehr_query(
+        query_type="metrics",
+        scenario=scenario,
+        location_id=location_id,
+        huc_id=huc_id,
+        order_limit=order_limit,
+        value_time_start=value_time_start,
+        value_time_end=value_time_end,
+        reference_time_single=reference_time_single,
+        reference_time_start=reference_time_start,
+        reference_time_end=reference_time_end,
+        value_min=value_min,
+        value_max=value_max,
+        include_metrics=include_metrics,
+        group_by=group_by,
+        order_by=order_by,
+        attribute_paths=attribute_paths
+    )
+    # convert units if necessary, add attributes, normalize
+    gdf = convert_metrics_to_viz_units(gdf, units, scenario['variable'])
+    attribute_df = combine_attributes(attribute_paths,units)
+    gdf = merge_attr_to_gdf(gdf, attribute_df)
+    gdf['max_perc_diff'] = gdf['max_value_delta']/gdf['primary_maximum']*100
+    include_metrics = include_metrics + ['max_perc_diff','upstream_area_value','ecoregion_L2_value','stream_order_value']
+    
+    # gdf = get_normalized_streamflow(gdf, include_metrics=include_metrics)
+    # norm_metrics = [col for col in gdf.columns if col[-4:]=='norm']
+    if metric_limits is not None:
+        for metric in gdf.columns:
+            if metric in metric_limits.keys():
+                limits = metric_limits[metric]
+                gdf = gdf[(gdf[metric] >= limits[0]) & (gdf[metric] <= limits[1])]       
+    
+    # leave out geometry - easier to work with the data
+    df = gdf.loc[:,[c for c in gdf.columns if c!='geometry']] 
+    df['easting']=gdf.to_crs("EPSG:3857").geometry.x
+    df['northing']=gdf.to_crs("EPSG:3857").geometry.y
+    
+    # for now limit vdims to peaks, % peak diff, and id
+    #vdim_metrics = list(set(include_metrics + norm_metrics))
+    vdims = [('max_perc_diff', 'peak % diff'),
+             ('primary_maximum', 'observed_peak'),
+             ('secondary_maximum', 'forecast_peak'),
+             ('primary_location_id','id'),
+             ('upstream_area_value','drainage_area')]
+    kdims = ['easting','northing']    
+
+    return hv.Points(df, kdims=kdims, vdims=vdims)
+
+
+
+def build_hv_polygons_from_query(
+    scenario: dict,
+    location_id: Union[str, List[str], None] = None,    
+    huc_id: Union[str, List[str], None] = None,
+    value_time_start: Union[pd.Timestamp, None] = None,
+    value_time_end: Union[pd.Timestamp, None] = None,    
+    reference_time_single: Union[pd.Timestamp, None] = None,
+    reference_time_start: Union[pd.Timestamp, None] = None,
+    reference_time_end: Union[pd.Timestamp, None] = None,
+    value_min: Union[float, None] = None,
+    value_max: Union[float, None] = None,
+    group_by: Union[List[str], None] = None,
+    order_by: Union[List[str], None] = None,       
+    include_metrics: Union[List[str], None] = None,
+    metric_limits: Union[dict, None] = None,  
+    attribute_paths: Union[List[Path], None] = None,
+    units: str = "metric",
+) -> hv.Points:
+    
+    gdf = run_teehr_query(
+        query_type="metrics",
+        scenario=scenario,
+        location_id=location_id,
+        huc_id=huc_id,
+        value_time_start=value_time_start,
+        value_time_end=value_time_end,
+        reference_time_single=reference_time_single,
+        reference_time_start=reference_time_start,
+        reference_time_end=reference_time_end,
+        value_min=value_min,
+        value_max=value_max,
+        include_metrics=include_metrics,
+        group_by=group_by,
+        order_by=order_by,
+        attribute_paths=attribute_paths
+    )
+    
+    # convert units if necessary, add attributes, normalize
+    gdf = gdf.to_crs("EPSG:3857")
+    gdf = convert_metrics_to_viz_units(gdf, units, scenario['variable'])
+    gdf['sum_diff'] = gdf['secondary_sum']-gdf['primary_sum']
+    include_metrics = include_metrics + ['sum_diff']
+
+    if metric_limits is not None:
+        for metric in gdf.columns:
+            if metric in metric_limits.keys():
+                limits = metric_limits[metric]
+                gdf = gdf[(gdf[metric] >= limits[0]) & (gdf[metric] <= limits[1])]       
+    
+    #convert to spatialpandas object
+    sdf = spd.GeoDataFrame(gdf)
+    
+    #vdim_metrics = list(set(include_metrics + norm_metrics))
+    vdims = include_metrics + [('primary_location_id','id')] 
+
+    return gv.Polygons(sdf, crs=ccrs.GOOGLE_MERCATOR, vdims=vdims)
+
+
+def build_hv_precip_tsplot_from_query_selected_point(
+    index: List[int],
+    points_dmap: hv.DynamicMap,
+    scenario: dict,
+    value_time_start: Union[pd.Timestamp, None] = None,
+    value_time_end: Union[pd.Timestamp, None] = None,    
+    reference_time_single: Union[pd.Timestamp, None] = None,
+    reference_time_start: Union[pd.Timestamp, None] = None,
+    reference_time_end: Union[pd.Timestamp, None] = None,
+    value_min: Union[float, None] = None,
+    value_max: Union[float, None] = None, 
+    attribute_paths: Union[List[Path], None] = None,
+    units: str = "metric",
+    opts = {},
+) -> hv.Points:
+    
+    if len(index) > 0 and len(points_dmap.dimensions('value')) > 0:  
+        point_id = points_dmap.dimension_values('primary_location_id')[index][0]
+        cross = pd.read_parquet(attribute_paths['usgs_huc_crosswalk'])
+        huc12_id = cross.loc[cross['primary_location_id']==point_id, 'secondary_location_id'].iloc[0]
+        huc10_id = "-".join(['huc10', huc12_id.split("-")[1][:10]])
+        title = f"{huc10_id} (Contains Gage: {point_id})"    
+        
+        df = run_teehr_query(
+            query_type="timeseries",
+            scenario=scenario,
+            location_id=huc10_id,
+            value_time_start=value_time_start,
+            value_time_end=value_time_end,
+            reference_time_single=reference_time_single,
+            reference_time_start=reference_time_start,
+            reference_time_end=reference_time_end,
+            value_min=value_min,
+            value_max=value_max,
+            order_by=['primary_location_id','reference_time','value_time'],
+            attribute_paths=attribute_paths,
+            include_geometry=False,
+        )            
+        for col in ['primary_value','secondary_value','value']:
+            if col in df.columns:
+                df[col + '_cum'] = df[col].cumsum()
+        
+        df['value_time_str'] = df['value_time'].dt.strftime('%Y-%m-%d-%H')
+        ymax_bars = max(df['primary_value'].max()*1.1,1)
+        ymax_curve = max(df['primary_value_cum'].max()*1.1,1)
+        
+        df = df.rename(columns = {'value_cum':'Cumulative (in)'})  # work around to get correct label on secondary axis
+        
+        
+        t = value_time_start + (value_time_end - value_time_start)*0.01
+        text_x = t.replace(second=0, microsecond=0, minute=0).strftime('%Y-%m-%d-%H')
+        text_y = ymax_bars*0.9    
+        
+        bars = hv.Bars(df, kdims = [('value_time_str','Date')], vdims = [('value', 'Precip Rate (in/hr)')])
+        curve = hv.Curve(df, kdims = [("value_time_str", "Date")], vdims = [('Cumulative (in)', 'Precip (in)')])
+        text = hv.Text(text_x, text_y, title).opts(text_align='left', text_font_size='10pt', 
+                                                   text_color='#57504d', text_font_style='bold')
+
+        bars.opts(**opts, fill_color = 'blue', line_color = None, ylim=(0, ymax_bars))
+        curve.opts(**opts, color='orange', hooks=[du.plot_secondary_bars_curve])
+
+        ts_element_hv = (bars * curve * text).opts(show_title=False)  ##  must control ylim of secondary axis in hook function!       
+    else:        
+        df = pd.DataFrame([[0,0],[1,0]], columns = ['Date','value'])
+        label = "Nothing Selected"
+        curve = hv.Curve(df, "Date", "value").opts(**opts)
+        text = hv.Text(0.01, 0.9, "No Selection").opts(text_align='left', text_font_size='10pt', 
+                                                       text_color='#57504d', text_font_style='bold')
+        ts_element_hv = (curve * text).opts(show_title=False)
+            
+    return ts_element_hv  
+
+#################################### 
+
+def get_precip_colormap():
+    ''' 
+    build custom precip colormap 
+    '''
+    cmap1 = cc.CET_L6[85:]
+    cmap2 = [cmap1[i] for i in range(0, len(cmap1), 3)]
+    ext = [cmap2[-1] + aa for aa in ['00','10','30','60','99']]
+    cmap = ext + cmap2[::-1] + cc.CET_R1
+    
+    return cmap
+
+def get_recurr_colormap():
+    ''' 
+    build explicit colormap for 2, 5, 10, 25, 50, 100 recurrence intervals
+    based on OWP High Flow Magnitude product
+    '''    
+    cmap = {0: 'lightgray', 
+            2: 'dodgerblue', 
+            5: 'yellow', 
+            10: 'darkorange', 
+            25: 'red', 
+            50: 'fuchsia', 
+            100: 'darkviolet'}
+    
+    return cmap
+
+
+def plot_secondary_bars_curve(plot, element):
+    """
+    Hook to plot data on a secondary (twin) axis on a Holoviews Plot with Bokeh backend.
+    More info:
+    - http://holoviews.org/user_guide/Customizing_Plots.html#plot-hooks
+    - https://docs.bokeh.org/en/latest/docs/user_guide/plotting.html#twin-axes
+    """
+    fig: Figure = plot.state
+    glyph_first: GlyphRenderer = fig.renderers[0]  # will be the original plot
+    glyph_last: GlyphRenderer = fig.renderers[-1] # will be the new plot
+    right_axis_name = "twiny"
+    # Create both axes if right axis does not exist
+    if right_axis_name not in fig.extra_y_ranges.keys():
+        # Recreate primary axis (left)
+        y_first_name = glyph_first.glyph.top
+        y_first_min = glyph_first.data_source.data[y_first_name].min()
+        y_first_max = glyph_first.data_source.data[y_first_name].max()
+        y_first_offset = (y_first_max - y_first_min) * 0.1
+        fig.y_range = Range1d(
+            start=0,
+            end=max(y_first_max,1) + y_first_offset
+       )
+        fig.y_range.name = glyph_first.y_range_name
+        # Create secondary axis (right)
+        y_last_name = glyph_last.glyph.y
+        y_last_min = glyph_last.data_source.data[y_last_name].min()
+        y_last_max = glyph_last.data_source.data[y_last_name].max()
+        y_last_offset = (y_last_max - y_last_min) * 0.1
+        fig.extra_y_ranges = {right_axis_name: Range1d(
+            start=0,
+            end=max(y_last_max,1) + y_last_offset
+        )}
+        fig.add_layout(LinearAxis(y_range_name=right_axis_name, axis_label=glyph_last.glyph.y), "right")
+    # Set right axis for the last glyph added to the figure
+    glyph_last.y_range_name = right_axis_name
+    
+    
+def plot_secondary_curve_curve(plot, element):
+    """
+    Hook to plot data on a secondary (twin) axis on a Holoviews Plot with Bokeh backend.
+    More info:
+    - http://holoviews.org/user_guide/Customizing_Plots.html#plot-hooks
+    - https://docs.bokeh.org/en/latest/docs/user_guide/plotting.html#twin-axes
+    """
+    fig: Figure = plot.state
+    glyph_first: GlyphRenderer = fig.renderers[0]  # will be the original plot
+    glyph_last: GlyphRenderer = fig.renderers[-1] # will be the new plot
+    right_axis_name = "twiny"
+    # Create both axes if right axis does not exist
+    if right_axis_name not in fig.extra_y_ranges.keys():
+        # Recreate primary axis (left)
+        y_first_name = glyph_first.glyph.y
+        y_first_min = glyph_first.data_source.data[y_first_name].min()
+        y_first_max = glyph_first.data_source.data[y_first_name].max()
+        y_first_offset = (y_first_max) * 0.1
+        fig.y_range = Range1d(
+            start=0,
+            end=y_first_max + y_first_offset
+       )
+        # Create secondary axis (right)
+        y_last_name = glyph_last.glyph.y
+        y_last_min = glyph_last.data_source.data[y_last_name].min()
+        y_last_max = glyph_last.data_source.data[y_last_name].max()
+        y_last_offset = (y_last_max) * 0.1
+        fig.extra_y_ranges = {right_axis_name: Range1d(
+            start=0,
+            end=y_last_max + y_last_offset
+        )}
+        fig.add_layout(LinearAxis(y_range_name=right_axis_name, axis_label=glyph_last.glyph.y), "right")
+    # Set right axis for the last glyph added to the figure
+    glyph_last.y_range_name = right_axis_name
