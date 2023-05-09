@@ -1,18 +1,13 @@
-import sys
-sys.path.insert(0, '../../')
-sys.path.insert(0, '../../evaluation/')
 
 import teehr.queries.duckdb as tqd
 import teehr.queries.utils as tqu
 import duckdb as ddb
-import temp_queries
 import pandas as pd
 import spatialpandas as spd
 import panel as pn
 import geopandas as gpd
 import numpy as np
 from datetime import datetime, timedelta
-from evaluation import utils, config
 from typing import List, Union
 from pathlib import Path
 import holoviews as hv
@@ -46,9 +41,8 @@ def run_teehr_query(
     return_query: Union[bool, None] = False,
     include_geometry: Union[bool, None] = None,
 ) -> Union[str, pd.DataFrame, gpd.GeoDataFrame]:
-
-    # start message - remove for now, figure out how to check if it was run by interaction
-    #print(f"Executing TEEHR {query_type} query...")
+    
+    #print('running query, huc_id=', huc_id)
     
     primary_filepath=scenario["primary_filepath"]
     secondary_filepath=scenario["secondary_filepath"]
@@ -73,10 +67,13 @@ def run_teehr_query(
         group_by = list(set(group_by))
         
     if order_by is None:
-        order_by=["primary_location_id"]
+        if query_type == "timeseries":
+            order_by=["primary_location_id", "reference_time", "value_time"]
+        else:
+            order_by=["primary_location_id"]
 
-    filters=[]
     # build the filters
+    filters=[]    
     
     # region (HUC) id
     if huc_id is not None:
@@ -86,6 +83,8 @@ def run_teehr_query(
             # if usgs, get the crosswalk (for now huc level must be 10 or smaller)
             if primary_filepath.parent.name == 'usgs':
                 location_list = get_usgs_locations_within_huc(huc_level, huc_id, attribute_paths)
+                # print('len loc list: ', len(location_list))
+                # print(location_list[220:230])
                 filters.append(
                     {
                         "column": "primary_location_id",
@@ -190,8 +189,6 @@ def run_teehr_query(
         else:             
             print('set up an error catch here')        
 
-    # min/max values --  ***  will eventually need to allow requiring one or other (primary or secondary) to be above threshold
-    #                         for recurrence flows, threshold is different at every location, future work to add this to queries 
     if value_min is not None:  
         if type(value_min) is str:
             value_min = float(value_min.split(' ')[0])       
@@ -254,17 +251,11 @@ def run_teehr_query(
             return_query=return_query,
             geometry_filepath=geometry_filepath,       
             include_geometry=include_geometry,
-        )         
-    
-    # if type(gdf) in [gpd.GeoDataFrame, pd.DataFrame]:
-    #     reftext = ""
-    #     if "reference_time" in gdf.columns:
-    #         reftext = f"and {gdf['reference_time'].nunique()} forecast reference times"
-    #     print(f"TEEHR query complete for {gdf['primary_location_id'].nunique()} locations {reftext}")
+        )     
+        
+    gdf = gdf.sort_values(order_by)
 
     return gdf
-
-
 
 
 ################################## get info about the parquet files
@@ -274,7 +265,6 @@ def get_parquet_date_range_across_scenarios(
     pathlist: List[Path] = [],
     date_type: str = "value_time",
 ) -> List[pd.Timestamp]:
-        
         
     print(f"Checking {date_type} range in the parquet files")    
       
@@ -402,7 +392,12 @@ def get_usgs_locations_within_huc(
     if "usgs_huc_crosswalk" in attribute_paths.keys():
         df = pd.read_parquet(attribute_paths["usgs_huc_crosswalk"])
         df['huc'] = df['secondary_location_id'].str[6:6+huc_level]
-        location_list = df[df['huc']==huc_id]['primary_location_id'].to_list()
+        
+        if huc_id != 'all':
+            location_list = df[df['huc']==huc_id]['primary_location_id'].to_list()
+        else:
+            location_list = df['primary_location_id'].to_list()
+        
         if not location_list:
            print(f"Warning, no usgs locations found in {huc_id}")     
     else:
@@ -624,18 +619,25 @@ def get_date_range_slider_with_range_as_title(
     '''
     
     if date_type == "reference_time":
-        range_start, range_end = get_parquet_date_range_across_scenarios(pathlist, date_type = "reference_time")  
-        value_end = range_start+timedelta(days=10)
+        range_start, range_end = get_parquet_date_range_across_scenarios(pathlist, date_type = "reference_time") 
+        # temporary for workshop
+        start_slider = datetime(2023, 1, 1)
+        #start_slider=range_start
+        value_end = start_slider+timedelta(days=10)
+        
     else:
         range_start, range_end = get_parquet_date_range_across_scenarios(pathlist, date_type = "value_time")  
         value_end = range_end
+        # temporary for workshop
+        start_slider = datetime(2023, 1, 1)
+        #start_slider=range_start
         
     dates_text = get_minmax_dates_text(range_start, range_end, date_type)
     dates_slider = pn.widgets.DatetimeRangeSlider(
         name='Selected start/end dates for evaluation',
         start=range_start, 
         end=range_end,
-        value=(range_start, value_end),
+        value=(start_slider, value_end),
         **opts,
     )
     return pn.Column(dates_text, dates_slider)
@@ -650,6 +652,16 @@ def get_minmax_dates_text(
     return pn.pane.HTML(f"Range of {date_type} available in cache: {min_date} - {max_date}", 
                         sizing_mode = "stretch_width",
                         style={'font-size': '15px', 'font-weight': 'bold'})
+
+def get_scenario_text(scenario: str) -> pn.pane:
+    
+    if scenario in ["medium_range","MRF"]:
+        scenario_text = "NWM Medium Range Forecasts"
+    elif scenario in ["short_range","SRF"]:
+        scenario_text = "NWM Short Range Forecasts"
+        
+    return scenario_text
+
 
 def get_lead_time_selector() -> pn.widgets.Select:
 
@@ -667,7 +679,20 @@ def get_huc2_selector() -> pn.widgets.Select:
     huc2_list = ["all"] + [str(huc2).zfill(2) for huc2 in list(range(1,19))]
     huc2_selector = pn.widgets.Select(name='HUC-2 Subregion', options=huc2_list, value="18", width_policy="fit")
     
-    return huc2_selector       
+    return huc2_selector      
+
+
+# def get_gage_id_selector(
+#     gage_list: List[str],
+#     selected_gage: Union[str, None] = None
+#     points_dmap = points_dmap
+# ) -> pn.widgets.Select:
+    
+#     index: List[int]
+    
+#     gage_selector = pn.widgets.Select(name='USGS gages', options=gage_list, value=gage_list[0], width_policy="fit")
+    
+#     return gage_selector
 
 
 def get_variable_selector(variable_list: List[str]) -> pn.widgets.Select:
@@ -695,14 +720,69 @@ def get_scenario_selector(scenario_name_list: List[str]) -> pn.widgets.Select:
     return scenario_selector
 
 
-def get_metric_selector(
-    variable: str,
+def get_multi_metric_selector(
+    variable: Union[str, None] = None,
     metric_list: Union[List[str], None] = None,
 ) -> pn.widgets.MultiSelect:
     
     if metric_list is None:
+        if variable is None: 
+            variable = 'streamflow'
+            
         if variable == 'streamflow':
             metric_list = [
+            "primary_maximum",              
+            "secondary_maximum", 
+            "max_value_delta",
+            "bias",
+            "nash_sutcliffe_efficiency",
+            "kling_gupta_efficiency",
+            "mean_squared_error",
+            "root_mean_squared_error",        
+            "max_value_timedelta",                  
+            "secondary_count",
+            "primary_count",
+            "secondary_average",
+            "primary_average",
+            "secondary_minimum",
+            "primary_minimum",             
+            "primary_max_value_time",
+            "secondary_max_value_time",
+            ]
+            values=["primary_maximum","secondary_maximum","max_value_delta"]
+            print(values)
+
+        elif variable == 'precipitation':
+            metric_list = [
+            "bias",
+            "secondary_sum",
+            "primary_sum",
+            "secondary_average",
+            "primary_average",
+            "secondary_variance",
+            "primary_variance",        
+            ] 
+            values=["primary_sum","secondary_sum"]
+            
+    metric_selector = pn.widgets.MultiSelect(name='Evaluation metrics', 
+                                          options=metric_list, 
+                                          #value=[metric_list[0]], 
+                                          value=values,
+                                          width_policy="fit")
+    return metric_selector            
+            
+
+def get_single_metric_selector(
+    variable: Union[str, None] = None,
+    metrics: Union[List[str], dict[str], None] = None,
+) -> pn.widgets.Select:
+    
+    if metrics is None:
+        if variable is None: 
+            variable = 'streamflow'
+            
+        if variable == 'streamflow':
+            metrics = [
             "bias",
             "nash_sutcliffe_efficiency",
             "kling_gupta_efficiency",
@@ -721,9 +801,8 @@ def get_metric_selector(
             "secondary_max_value_time",
             "max_value_timedelta",             
             ]
-
         elif variable == 'precipitation':
-            metric_list = [
+            metrics = [
             "bias",
             "secondary_sum",
             "primary_sum",
@@ -731,13 +810,17 @@ def get_metric_selector(
             "primary_average",
             "secondary_variance",
             "primary_variance",        
-            ]        
+            ] 
+      
+    elif type(metrics) is dict:
+        value = list(metrics.values())[0]
+    else:
+        value = [metrics[0]]
     
-    metric_selector = pn.widgets.MultiSelect(name='Evaluation metrics', 
-                                          options=metric_list, 
-                                          value=[metric_list[0]], 
+    metric_selector = pn.widgets.Select(name='Evaluation metric', 
+                                          options=metrics, 
+                                          value=value, 
                                           width_policy="fit")
-    
     return metric_selector
 
 
@@ -762,14 +845,13 @@ def get_threshold_selector(variable: str = 'streamflow') -> pn.widgets.Select:
                                           options=threshold_list, 
                                           value=threshold_list[0], 
                                           width_policy="fit")
-    
     return threshold_selector
 
 def get_filter_widgets(
     scenario: dict = {},
 ) -> List:
     
-    value_time_slider = get_value_time_slider(scenario)
+    #value_time_slider = get_value_time_slider(scenario)
     
     value_time_slider = get_date_range_slider_with_range_as_title(
         pathlist=[scenario["primary_filepath"], scenario["secondary_filepath"]],
@@ -781,13 +863,13 @@ def get_filter_widgets(
         date_type='reference_time',
         opts = dict(width = 700, bar_color = "red", step=3600000*6)
     )
-
+    lead_time_selector = get_lead_time_selector()
     huc2_selector = get_huc2_selector()
     order_limit_selector = get_order_limit_selector()
     threshold_selector = get_threshold_selector(scenario['variable'])
-    metric_selector = get_metric_selector(scenario['variable'])    
+    metric_selector = get_multi_metric_selector(scenario['variable'])    
     
-    return [value_time_slider, reference_time_slider, huc2_selector, 
+    return [value_time_slider, reference_time_slider, lead_time_selector, huc2_selector, 
             threshold_selector, order_limit_selector, metric_selector]
 
 ##############################################  attributes
@@ -1099,385 +1181,55 @@ def get_flow_metrics(metric_list: Union[List[str], None]) -> List[str]:
         return [metric for metric in metric_list if metric in flow_metrics]
 
 
-####################### holoviews
+def get_metric_dict(
+    metric: str,
+    scenario_name: Union[str, None] = None,
+) -> dict:
 
-def get_aggregator(measure):
-    '''
-    datashader aggregator function
-    '''
-    return ds.mean(measure)
-
-
-def get_all_points(scenario: dict) -> hv.Points:
-
-    df = pd.read_parquet(scenario["geometry_filepath"])
-    gdf = tqu.df_to_gdf(df)
-    gdf['easting'] = gdf.geometry.x
-    gdf['northing'] = gdf.geometry.y
+    if scenario_name == 'short_range':
+        duration = 18
+    elif scenario_name == 'medium_range':
+        duration = 240
+    else:
+        duration = 240
     
-    return hv.Points(gdf, kdims = ['easting','northing'], vdims = ['id'])
-
-
-def build_points_from_query(
-    scenario: dict,
-    location_id: Union[str, List[str], None] = None,    
-    huc_id: Union[str, List[str], None] = None,
-    order_limit: Union[int, None] = None,
-    value_time_start: Union[pd.Timestamp, None] = None,
-    value_time_end: Union[pd.Timestamp, None] = None,    
-    reference_time_single: Union[pd.Timestamp, None] = None,
-    reference_time_start: Union[pd.Timestamp, None] = None,
-    reference_time_end: Union[pd.Timestamp, None] = None,
-    value_min: Union[float, None] = None,
-    value_max: Union[float, None] = None,
-    group_by: Union[List[str], None] = None,
-    order_by: Union[List[str], None] = None,       
-    include_metrics: Union[List[str], None] = None,
-    metric_limits: Union[dict, None] = None,  
-    attribute_paths: Union[List[Path], None] = None,
-    units: str = "metric",
-) -> hv.Points:
     
-    gdf = run_teehr_query(
-        query_type="metrics",
-        scenario=scenario,
-        location_id=location_id,
-        huc_id=huc_id,
-        order_limit=order_limit,
-        value_time_start=value_time_start,
-        value_time_end=value_time_end,
-        reference_time_single=reference_time_single,
-        reference_time_start=reference_time_start,
-        reference_time_end=reference_time_end,
-        value_min=value_min,
-        value_max=value_max,
-        include_metrics=include_metrics,
-        group_by=group_by,
-        order_by=order_by,
-        attribute_paths=attribute_paths
+    metric_dicts = dict(
+        max_perc_diff = dict(
+            label="Peak Error (%)",
+            color_opts=dict(
+                cmap=cc.CET_D1A[::-1],
+                cnorm='linear',
+                clim=(-100,100)
+            )
+        ),
+        max_time_diff = dict(
+            label="Peak Timing Error (hrs)",
+            color_opts=dict(        
+                cmap=cc.CET_D1A[::-1],
+                cnorm='linear',
+                clim=(-duration,duration),
+            )
+        )
     )
-    # convert units if necessary, add attributes, normalize
-    gdf = convert_query_to_viz_units(gdf, units, scenario['variable'])
-    attribute_df = combine_attributes(attribute_paths,units)
-    gdf = merge_attr_to_gdf(gdf, attribute_df)
-    gdf['max_perc_diff'] = gdf['max_value_delta']/gdf['primary_maximum']*100
-    include_metrics = include_metrics + ['max_perc_diff','upstream_area_value','ecoregion_L2_value','stream_order_value']
+    return metric_dicts[metric]
     
-    # gdf = get_normalized_streamflow(gdf, include_metrics=include_metrics)
-    # norm_metrics = [col for col in gdf.columns if col[-4:]=='norm']
-    if metric_limits is not None:
-        for metric in gdf.columns:
-            if metric in metric_limits.keys():
-                limits = metric_limits[metric]
-                gdf = gdf[(gdf[metric] >= limits[0]) & (gdf[metric] <= limits[1])]       
     
-    # leave out geometry - easier to work with the data
-    df = gdf.loc[:,[c for c in gdf.columns if c!='geometry']] 
-    df['easting']=gdf.to_crs("EPSG:3857").geometry.x
-    df['northing']=gdf.to_crs("EPSG:3857").geometry.y
+def get_metric_selector_dict(metrics: List[str]) -> dict:
+    metric_selector_dict = {}
+    for metric in metrics:
+        metric_dict = get_metric_dict(metric)    
+        metric_selector_dict[metric_dict['label']] = metric
+    return metric_selector_dict
     
-    # for now limit vdims to peaks, % peak diff, and id
-    #vdim_metrics = list(set(include_metrics + norm_metrics))
-    vdims = [('max_perc_diff', 'peak % diff'),
-             ('primary_maximum', 'observed_peak'),
-             ('secondary_maximum', 'forecast_peak'),
-             ('primary_location_id','id'),
-             ('upstream_area_value','drainage_area')]
-    kdims = ['easting','northing']    
-
-    return hv.Points(df, kdims=kdims, vdims=vdims)
-
-
-def build_polygons_from_query(
-    scenario: dict,
-    location_id: Union[str, List[str], None] = None,    
-    huc_id: Union[str, List[str], None] = None,
-    value_time_start: Union[pd.Timestamp, None] = None,
-    value_time_end: Union[pd.Timestamp, None] = None,    
-    reference_time_single: Union[pd.Timestamp, None] = None,
-    reference_time_start: Union[pd.Timestamp, None] = None,
-    reference_time_end: Union[pd.Timestamp, None] = None,
-    value_min: Union[float, None] = None,
-    value_max: Union[float, None] = None,
-    group_by: Union[List[str], None] = None,
-    order_by: Union[List[str], None] = None,       
-    include_metrics: Union[List[str], None] = None,
-    metric_limits: Union[dict, None] = None,  
-    attribute_paths: Union[List[Path], None] = None,
-    units: str = "metric",
-) -> hv.Points:
+def get_separate_legend() -> hv.Overlay:
+    blue=hv.Curve([2, 2]).opts(fontscale=1.2, xlim=(-0.4,3),ylim=(0,3), 
+                               toolbar=None, height=100, width=200, color='dodgerblue', xaxis=None, yaxis=None)
+    orange=hv.Curve([1, 1]).opts(color='orange')
+    text_obs=hv.Text(1.2,2,'Observed').opts(color='black', text_align='left')
+    text_fcst=hv.Text(1.2,1,'Forecast').opts(color='black', text_align='left')
     
-    gdf = run_teehr_query(
-        query_type="metrics",
-        scenario=scenario,
-        location_id=location_id,
-        huc_id=huc_id,
-        value_time_start=value_time_start,
-        value_time_end=value_time_end,
-        reference_time_single=reference_time_single,
-        reference_time_start=reference_time_start,
-        reference_time_end=reference_time_end,
-        value_min=value_min,
-        value_max=value_max,
-        include_metrics=include_metrics,
-        group_by=group_by,
-        order_by=order_by,
-        attribute_paths=attribute_paths
-    )
-    
-    # convert units if necessary, add attributes, normalize
-    gdf = gdf.to_crs("EPSG:3857")
-    gdf = convert_query_to_viz_units(gdf, units, scenario['variable'])
-    gdf['sum_diff'] = gdf['secondary_sum']-gdf['primary_sum']
-    include_metrics = include_metrics + ['sum_diff']
-
-    if metric_limits is not None:
-        for metric in gdf.columns:
-            if metric in metric_limits.keys():
-                limits = metric_limits[metric]
-                gdf = gdf[(gdf[metric] >= limits[0]) & (gdf[metric] <= limits[1])]       
-    
-    #convert to spatialpandas object
-    sdf = spd.GeoDataFrame(gdf)
-    
-    #vdim_metrics = list(set(include_metrics + norm_metrics))
-    vdims = include_metrics + [('primary_location_id','id')] 
-
-    return gv.Polygons(sdf, crs=ccrs.GOOGLE_MERCATOR, vdims=vdims)
-
-
-def build_hyetograph_from_query_selected_point(
-    index: List[int],
-    points_dmap: hv.DynamicMap,
-    scenario: dict,
-    value_time_start: Union[pd.Timestamp, None] = None,
-    value_time_end: Union[pd.Timestamp, None] = None,    
-    reference_time_single: Union[pd.Timestamp, None] = None,
-    reference_time_start: Union[pd.Timestamp, None] = None,
-    reference_time_end: Union[pd.Timestamp, None] = None,
-    value_min: Union[float, None] = None,
-    value_max: Union[float, None] = None, 
-    attribute_paths: Union[List[Path], None] = None,
-    units: str = "metric",
-    opts = {},
-) -> hv.Points:
-    
-    if len(index) > 0 and len(points_dmap.dimensions('value')) > 0:  
-        point_id = points_dmap.dimension_values('primary_location_id')[index][0]
-        cross = pd.read_parquet(attribute_paths['usgs_huc_crosswalk'])
-        huc12_id = cross.loc[cross['primary_location_id']==point_id, 'secondary_location_id'].iloc[0]
-        huc10_id = "-".join(['huc10', huc12_id.split("-")[1][:10]])
-        title = f"{huc10_id} (Contains Gage: {point_id})"     
-        
-        df = run_teehr_query(
-            query_type="timeseries",
-            scenario=scenario,
-            location_id=huc10_id,
-            value_time_start=value_time_start,
-            value_time_end=value_time_end,
-            reference_time_single=reference_time_single,
-            reference_time_start=reference_time_start,
-            reference_time_end=reference_time_end,
-            value_min=value_min,
-            value_max=value_max,
-            order_by=['primary_location_id','reference_time','value_time'],
-            attribute_paths=attribute_paths,
-            include_geometry=False,
-        )            
-        df = convert_query_to_viz_units(df, units, 'precipitation')
-        
-        df['value_time_str'] = df['value_time'].dt.strftime('%Y-%m-%d-%H')
-        time_start = df['value_time'].min()
-        time_end = df['value_time'].max()
-        t = time_start + (time_end - time_start)*0.01
-        text_x = t.replace(second=0, microsecond=0, minute=0).strftime('%Y-%m-%d-%H')
-
-        if units == 'metric':
-            unit_rate_label = 'mm/hr'
-            unit_cum_label = 'mm'
-        else:
-            unit_rate_label = 'in/hr'
-            unit_cum_label = 'in'
-        
-        if 'value' in df.columns:  #single timeseries
-            df['cumulative'] = df['value'].cumsum()
-
-            data_max = df['value'].max()
-            ymax_bars = max(data_max*1.1,1)
-            ymax_curve = max(data_max*1.1,1)
-            text_y = ymax_bars*0.9   
-            text_label = hv.Text(text_x, text_y, title).opts(text_align='left', text_font_size='10pt', 
-                            text_color='#57504d', text_font_style='bold')               
-
-            bars = hv.Bars(df, kdims = [('value_time_str','Date')], vdims = [('value', 'Precip Rate ' + unit_rate_label)])
-            curve = hv.Curve(df, kdims = [('value_time_str', 'Date')], vdims = [('cum', 'Precip ' + unit_cum_label)])
-
-            bars.opts(**opts, fill_color = 'blue', line_color = None, ylim=(0, ymax_bars))
-            curve.opts(**opts, color='orange', hooks=[plot_secondary_bars_curve])
-            ts_layout_hv = (bars * curve * text_label).opts(show_title=False)  
-
-        else:
-
-            df['primary_cumulative'] = df['primary_value'].cumsum()
-            df['secondary_cumulative'] = df['secondary_value'].cumsum()
-            data_max = max(df['primary_value'].max(), df['secondary_value'].max())
-            data_max_cum = max(df['primary_cumulative'].max(), df['secondary_cumulative'].max())
-            
-            ###  need to fix ymax so both cumulative 
-            
-            ymax_bars = max(data_max*1.1,1)
-            ymax_curve = max(data_max_cum*1.1,1)
-            text_y = ymax_bars*0.9   
-            text_label = hv.Text(text_x, text_y, title).opts(text_align='left', text_font_size='10pt', 
-                            text_color='#57504d', text_font_style='bold')  
-            
-            bars_prim = hv.Bars(df, kdims = [('value_time_str','Date')], 
-                                vdims = [('primary_value', 'Precip Rate ' + unit_rate_label)])          
-            curve_prim = hv.Curve(df, kdims = [('value_time_str', 'Date')], 
-                                  vdims = [('primary_cumulative', 'Precip ' + unit_cum_label)])
-            
-            bars_sec = hv.Bars(df, kdims = [('value_time_str','Date')], 
-                               vdims = [('secondary_value', 'Precip Rate ' + unit_rate_label)])
-            curve_sec = hv.Curve(df, kdims = [('value_time_str', 'Date')], 
-                                 vdims = [('secondary_cumulative', 'Precip ' + unit_cum_label)])
-
-            bars_prim.opts(**opts, fill_color = 'dodgerblue', line_color = None, ylim=(0, ymax_bars))
-            curve_prim.opts(**opts, color='blue', ylim=(0, ymax_curve), hooks=[plot_secondary_bars_curve])    
-            
-            bars_sec.opts(**opts, fill_color = 'sandybrown', line_color = None, ylim=(0, ymax_bars))
-            curve_sec.opts(**opts, color='orange', ylim=(0, ymax_curve), hooks=[plot_secondary_bars_curve])    
-            
-            ts_layout_hv = (bars_prim * bars_sec * curve_prim * curve_sec * text_label).opts(show_title=False)  
-     
-    else:        
-        df = pd.DataFrame([[0,0],[1,0]], columns = ['Date','value'])
-        label = "Nothing Selected"
-        curve = hv.Curve(df, "Date", "value").opts(**opts)
-        text_label = hv.Text(0.01, 0.9, "No Selection").opts(text_align='left', text_font_size='10pt', 
-                                                       text_color='#57504d', text_font_style='bold')
-        ts_layout_hv = (curve * text_label).opts(show_title=False)
-            
-    return ts_layout_hv  
-
-
-def build_hydrograph_from_query_selected_point(
-    index: List[int],
-    points_dmap: hv.DynamicMap,
-    scenario: dict,
-    value_time_start: Union[pd.Timestamp, None] = None,
-    value_time_end: Union[pd.Timestamp, None] = None,    
-    reference_time_single: Union[pd.Timestamp, None] = None,
-    reference_time_start: Union[pd.Timestamp, None] = None,
-    reference_time_end: Union[pd.Timestamp, None] = None,
-    value_min: Union[float, None] = None,
-    value_max: Union[float, None] = None, 
-    attribute_paths: Union[List[Path], None] = None,
-    units: str = "metric",
-    opts = {},
-) -> hv.Points:
-    
-    if len(index) > 0 and len(points_dmap.dimensions('value')) > 0:  
-        point_id = points_dmap.dimension_values('primary_location_id')[index][0]
-        area = points_dmap.dimension_values('upstream_area_value')[index][0]
-        title = f"Gage ID: {point_id}"
-        
-        df = run_teehr_query(
-            query_type="timeseries",
-            scenario=scenario,
-            location_id=point_id,
-            value_time_start=value_time_start,
-            value_time_end=value_time_end,
-            reference_time_single=reference_time_single,
-            reference_time_start=reference_time_start,
-            reference_time_end=reference_time_end,
-            value_min=value_min,
-            value_max=value_max,
-            order_by=['primary_location_id','reference_time','value_time'],
-            attribute_paths=attribute_paths,
-            include_geometry=False,
-        )      
-        df = convert_query_to_viz_units(df, units, 'streamflow')      
-        
-        time_start = df['value_time'].min()
-        time_end = df['value_time'].max()
-        t = time_start + (time_end - time_start)*0.01
-        text_x = t.replace(second=0, microsecond=0, minute=0).strftime('%Y-%m-%d-%H')
-
-        if units == 'metric':
-            unit_label = 'cms'
-            unit_norm_label = 'mm/hr'
-            conversion = 3600*1000/1000**2
-        else:
-            unit_label = 'cfs'
-            unit_norm_label = 'in/hr'
-            conversion = 3600*12/5280**2
-        
-        if 'value' in df.columns:  #single timeseries
-            df['normalized'] = df['value']/area*conversion
-
-            data_max = df['value'].max()
-            data_max_norm = df['normalized'].max()
-            ymax_flow = max(data_max*1.1,1)
-            ymax_norm = max(data_max_norm*1.1,1)
-            text_y = ymax_flow*0.9   
-            text_label = hv.Text(text_x, text_y, title).opts(text_align='left', text_font_size='10pt', 
-                                           text_color='#57504d', text_font_style='bold')  
-
-            flow = hv.Curve(df, kdims = [('value_time', 'Date')], vdims = [('value', 'Flow ' + unit_label)])
-            norm = hv.Curve(df, kdims = [('value_time', 'Date')], vdims = [('normalized', 'Normalized Flow ' + unit_norm_label)])
-
-            flow.opts(**opts, color='blue', ylim=(0, ymax_flow))
-            norm.opts(**opts, color='orange', alpha=0, ylim=(0, ymax_norm), hooks=[plot_secondary_bars_curve])
-
-        else:
-
-            df['primary_normalized'] = df['primary_value']/area*conversion
-            df['secondary_normalized'] = df['secondary_value']/area*conversion
-            prim_max = df['primary_value'].max()
-            sec_max = df['secondary_value'].max()
-            data_max = max(prim_max, sec_max)
-            data_max_norm = max(df['primary_normalized'].max(), df['secondary_normalized'].max())
-            
-            ymax_flow = max(data_max*1.1,1)
-            ymax_norm = max(data_max_norm*1.1,1)
-            text_y = ymax_flow*0.9  
-            text_label = hv.Text(text_x, text_y, title).opts(text_align='left', text_font_size='10pt', 
-                                           text_color='#57504d', text_font_style='bold')  
-
-            flow_prim = hv.Curve(df, kdims = [('value_time', 'Date')], 
-                                 vdims = [('primary_value', 'Flow ' + unit_label)])
-            norm_prim = hv.Curve(df, kdims = [('value_time', 'Date')], 
-                                 vdims = [('primary_normalized', 'Normalized Flow ' + unit_norm_label)])
-            
-            flow_sec = hv.Curve(df, kdims = [('value_time', 'Date')], 
-                                vdims = [('secondary_value', 'Flow ' + unit_label)])
-            norm_sec = hv.Curve(df, kdims = [('value_time', 'Date')], 
-                                vdims = [('secondary_normalized', 'Normalized Flow ' + unit_norm_label)])
-
-            flow_prim.opts(**opts, color='dodgerblue', ylim=(0, ymax_flow))
-            norm_prim.opts(**opts, color='blue', alpha=0, ylim=(0, ymax_norm), hooks=[plot_secondary_curve_curve])  
-            
-            flow_sec.opts(**opts, color='sandybrown', ylim=(0, ymax_flow))
-            norm_sec.opts(**opts, color='orange', alpha=0, ylim=(0, ymax_norm), hooks=[plot_secondary_curve_curve]) 
-          
-            if prim_max > sec_max:
-                ts_layout_hv = (flow_prim * flow_sec * norm_prim * norm_sec * text_label).opts(show_title=False)  
-            else:
-                ts_layout_hv = (flow_sec * flow_prim * norm_sec * norm_prim * text_label).opts(show_title=False)
-
-    else:        
-        df = pd.DataFrame([[0,0],[1,0]], columns = ['Date','value'])
-        label = "Nothing Selected"
-        curve = hv.Curve(df, "Date", "value").opts(**opts)
-        text = hv.Text(0.01, 0.9, "No Selection").opts(text_align='left', text_font_size='10pt', 
-                                                       text_color='#57504d', text_font_style='bold')
-        ts_layout_hv = (curve * text).opts(show_title=False)
-            
-    return ts_layout_hv  
-
-
-
-#################################### 
+    return orange*blue*text_obs*text_fcst
 
 def get_precip_colormap():
     ''' 
@@ -1505,6 +1257,8 @@ def get_recurr_colormap():
     
     return cmap
 
+# These hook functions currently rescale the original plot to the data extent - needs to be rewritten to
+# read the maintain a ylim max that is set in opts on the plot
 
 def plot_secondary_bars_curve(plot, element):
     """
@@ -1577,3 +1331,605 @@ def plot_secondary_curve_curve(plot, element):
         fig.add_layout(LinearAxis(y_range_name=right_axis_name, axis_label=glyph_last.glyph.y), "right")
     # Set right axis for the last glyph added to the figure
     glyph_last.y_range_name = right_axis_name
+
+def update_map_extents(plot, element):
+
+    bkplot = plot.handles['plot']
+    xdata = element.dataset.data[element.dataset.kdims[0].name]   
+    x_range = xdata.min(), xdata.max()
+    buffer_x = (x_range[1] - x_range[0])*0.1
+    x_range = x_range[0] - buffer_x, x_range[1] + buffer_x
+    
+    old_x_range_reset = bkplot.x_range.reset_start, bkplot.x_range.reset_end  
+    if old_x_range_reset != x_range:
+        bkplot.x_range.start, bkplot.x_range.end = x_range
+        bkplot.x_range.reset_start, bkplot.x_range.reset_end = x_range    
+    
+    ydata = element.dataset.data[element.dataset.kdims[1].name]
+    y_range = ydata.min(), ydata.max()
+    buffer_y = (y_range[1] - y_range[0])*0.1
+    y_range = y_range[0] - buffer_y, y_range[1] + buffer_y
+    
+    old_y_range_reset = bkplot.y_range.reset_start, bkplot.y_range.reset_end  
+    if old_y_range_reset != y_range:
+        bkplot.y_range.start, bkplot.y_range.end = y_range
+        bkplot.y_range.reset_start, bkplot.y_range.reset_end = y_range
+    
+####################### holoviews
+
+def get_aggregator(measure):
+    '''
+    datashader aggregator function
+    '''
+    return ds.mean(measure)
+
+def build_points_dmap_from_query(
+    scenario: dict,
+    location_id: Union[str, List[str], None] = None,    
+    huc_id: Union[str, List[str], None] = None,
+    order_limit: Union[int, None] = None,
+    value_time_start: Union[pd.Timestamp, None] = None,
+    value_time_end: Union[pd.Timestamp, None] = None,    
+    reference_time_single: Union[pd.Timestamp, None] = None,
+    reference_time_start: Union[pd.Timestamp, None] = None,
+    reference_time_end: Union[pd.Timestamp, None] = None,
+    value_min: Union[float, None] = None,
+    value_max: Union[float, None] = None,
+    group_by: Union[List[str], None] = None,
+    order_by: Union[List[str], None] = None,       
+    include_metrics: Union[List[str], None] = None,
+    metric_limits: Union[dict, None] = None,  
+    plot_metric: Union[str, None] = None,
+    attribute_paths: Union[List[Path], None] = None,
+    units: str = "metric",
+) -> hv.Points:
+    
+    # temporary
+    include_metrics_query=include_metrics.copy()
+    if 'max_perc_diff' in include_metrics_query:
+        include_metrics_query[include_metrics_query.index('max_perc_diff')]='primary_maximum'
+        include_metrics_query.append('max_value_delta')
+    if 'max_time_diff'in include_metrics_query:
+        include_metrics_query[include_metrics_query.index('max_time_diff')]='max_value_timedelta'    
+    
+    gdf = run_teehr_query(
+        query_type="metrics",
+        scenario=scenario,
+        location_id=location_id,
+        huc_id=huc_id,
+        order_limit=order_limit,
+        value_time_start=value_time_start,
+        value_time_end=value_time_end,
+        reference_time_single=reference_time_single,
+        reference_time_start=reference_time_start,
+        reference_time_end=reference_time_end,
+        value_min=value_min,
+        value_max=value_max,
+        include_metrics=include_metrics_query,
+        group_by=group_by,
+        order_by=order_by,
+        attribute_paths=attribute_paths
+    )
+    #print(len(gdf))
+    
+    # convert units if necessary, add attributes, normalize
+    gdf = convert_query_to_viz_units(gdf, units, scenario['variable'])
+    attribute_df = combine_attributes(attribute_paths,units)
+    gdf = merge_attr_to_gdf(gdf, attribute_df)
+    
+    # temporary - to be generalized
+    include_metrics = include_metrics + ['upstream_area_value','ecoregion_L2_value','stream_order_value']    
+    
+    if 'max_perc_diff' in include_metrics:
+        gdf['max_perc_diff'] = gdf['max_value_delta']/gdf['primary_maximum']*100
+    if 'max_time_diff'in include_metrics:
+        gdf['max_time_diff'] = (gdf['max_value_timedelta'] / np.timedelta64(1, 'h')).astype(int)
+    
+    # gdf = get_normalized_streamflow(gdf, include_metrics=include_metrics)
+    # norm_metrics = [col for col in gdf.columns if col[-4:]=='norm']
+    if metric_limits is not None:
+        for metric in gdf.columns:
+            if metric in metric_limits.keys():
+                limits = metric_limits[metric]
+                gdf = gdf[(gdf[metric] >= limits[0]) & (gdf[metric] <= limits[1])]       
+    
+    # leave out geometry - easier to work with the data
+    df = gdf.loc[:,[c for c in gdf.columns if c!='geometry']] 
+    df['easting']=gdf.to_crs("EPSG:3857").geometry.x
+    df['northing']=gdf.to_crs("EPSG:3857").geometry.y
+    
+#     if plot_metric is not None:
+#         metric_dict = get_metric_dict(plot_metric, scenario_name=scenario['scenario_name'])
+#     else:
+#         metric_dict = get_metric_dict(vdims[0][0], scenario_name=scenario['scenario_name'])    
+    
+#     # for now limit vdims to peaks, % peak diff, and id
+#     #vdim_metrics = list(set(include_metrics + norm_metrics))
+#     vdims = [(plot_metric, metric_dict['label']),
+#              ('primary_location_id','id'),
+#              ('upstream_area_value','drainage_area')]
+#     kdims = ['easting','northing']    
+        
+#     points = hv.Points(df, kdims=kdims, vdims=vdims)#.redim.range(
+        # easting=(df['easting'].min(), df['easting'].max()),
+        # northing=(df['northing'].min(), df['northing'].max()))
+#     points = points.opts(color=hv.dim(plot_metric), **metric_dict['color_opts'], title=metric_dict['label'], hooks=[update_map_extents])
+    
+    points_bind=pn.bind(create_points, df, plot_metric, scenario)
+    
+    points_dmap = (hv.DynamicMap(points_bind)).opts(hooks=[update_map_extents]).redim.range(
+        easting=(df['easting'].min(), df['easting'].max()),
+        northing=(df['northing'].min(), df['northing'].max()))
+    
+    return points_dmap
+
+def create_points(df, plot_metric, scenario):
+    if plot_metric is not None:
+        metric_dict = get_metric_dict(plot_metric, scenario_name=scenario['scenario_name'])
+    else:
+        metric_dict = get_metric_dict(vdims[0][0], scenario_name=scenario['scenario_name'])  
+    vdims = [(plot_metric, metric_dict['label']),
+             ('primary_location_id','id'),
+             ('upstream_area_value','drainage_area')]
+    kdims = ['easting','northing']    
+    points = hv.Points(df, kdims=kdims, vdims=vdims)    
+    
+    return points
+
+def build_points_from_query(
+    scenario: dict,
+    location_id: Union[str, List[str], None] = None,    
+    huc_id: Union[str, List[str], None] = None,
+    order_limit: Union[int, None] = None,
+    value_time_start: Union[pd.Timestamp, None] = None,
+    value_time_end: Union[pd.Timestamp, None] = None,    
+    reference_time_single: Union[pd.Timestamp, None] = None,
+    reference_time_start: Union[pd.Timestamp, None] = None,
+    reference_time_end: Union[pd.Timestamp, None] = None,
+    value_min: Union[float, None] = None,
+    value_max: Union[float, None] = None,
+    group_by: Union[List[str], None] = None,
+    order_by: Union[List[str], None] = None,       
+    include_metrics: Union[List[str], None] = None,
+    metric_limits: Union[dict, None] = None,  
+    plot_metric: Union[str, None] = None,
+    attribute_paths: Union[List[Path], None] = None,
+    units: str = "metric",
+    return_query: bool = False,
+) -> hv.Points:
+    
+    # temporary
+    include_metrics_query=include_metrics.copy()
+    if 'max_perc_diff' in include_metrics_query:
+        include_metrics_query[include_metrics_query.index('max_perc_diff')]='primary_maximum'
+        include_metrics_query.append('max_value_delta')
+    if 'max_time_diff'in include_metrics_query:
+        include_metrics_query[include_metrics_query.index('max_time_diff')]='max_value_timedelta'    
+        
+    #print(include_metrics_query)
+    
+    gdf = run_teehr_query(
+        query_type="metrics",
+        scenario=scenario,
+        location_id=location_id,
+        huc_id=huc_id,
+        order_limit=order_limit,
+        value_time_start=value_time_start,
+        value_time_end=value_time_end,
+        reference_time_single=reference_time_single,
+        reference_time_start=reference_time_start,
+        reference_time_end=reference_time_end,
+        value_min=value_min,
+        value_max=value_max,
+        include_metrics=include_metrics_query,
+        group_by=group_by,
+        order_by=order_by,
+        attribute_paths=attribute_paths,
+        return_query=return_query,
+    )
+    
+    # convert units if necessary, add attributes, normalize
+    gdf = convert_query_to_viz_units(gdf, units, scenario['variable'])
+    attribute_df = combine_attributes(attribute_paths,units)
+    gdf = merge_attr_to_gdf(gdf, attribute_df)
+    
+    # temporary - to be generalized
+    include_metrics = include_metrics + ['upstream_area_value','ecoregion_L2_value','stream_order_value']    
+    
+    if 'max_perc_diff' in include_metrics:
+        gdf['max_perc_diff'] = gdf['max_value_delta']/gdf['primary_maximum']*100
+    if 'max_time_diff'in include_metrics:
+        gdf['max_time_diff'] = (gdf['max_value_timedelta'] / np.timedelta64(1, 'h')).astype(int)
+    
+    # gdf = get_normalized_streamflow(gdf, include_metrics=include_metrics)
+    # norm_metrics = [col for col in gdf.columns if col[-4:]=='norm']
+    if metric_limits is not None:
+        for metric in gdf.columns:
+            if metric in metric_limits.keys():
+                limits = metric_limits[metric]
+                gdf = gdf[(gdf[metric] >= limits[0]) & (gdf[metric] <= limits[1])]     
+                
+    # print(len(gdf))
+    # print(gdf.loc[220:230,'primary_location_id'])
+    
+    # leave out geometry - easier to work with the data
+    df = gdf.loc[:,[c for c in gdf.columns if c!='geometry']] 
+    df['easting']=gdf.to_crs("EPSG:3857").geometry.x
+    df['northing']=gdf.to_crs("EPSG:3857").geometry.y
+    
+    if plot_metric is not None:
+        metric_dict = get_metric_dict(plot_metric, scenario_name=scenario['scenario_name'])
+    else:
+        metric_dict = get_metric_dict(vdims[0][0], scenario_name=scenario['scenario_name'])    
+    
+#     # for now limit vdims to peaks, % peak diff, and id
+    #vdim_metrics = list(set(include_metrics + norm_metrics))
+    vdims = [(plot_metric, metric_dict['label']),
+             ('primary_location_id','id'),
+             ('upstream_area_value','drainage_area')]
+    kdims = ['easting','northing']    
+        
+    points = hv.Points(df, kdims=kdims, vdims=vdims)
+    points = points.opts(color=hv.dim(plot_metric), **metric_dict['color_opts'], title=metric_dict['label'])#, hooks=[update_map_extents])  
+    
+    return points
+
+
+def build_polygons_from_query(
+    scenario: dict,
+    location_id: Union[str, List[str], None] = None,    
+    huc_id: Union[str, List[str], None] = None,
+    value_time_start: Union[pd.Timestamp, None] = None,
+    value_time_end: Union[pd.Timestamp, None] = None,    
+    reference_time_single: Union[pd.Timestamp, None] = None,
+    reference_time_start: Union[pd.Timestamp, None] = None,
+    reference_time_end: Union[pd.Timestamp, None] = None,
+    value_min: Union[float, None] = None,
+    value_max: Union[float, None] = None,
+    group_by: Union[List[str], None] = None,
+    order_by: Union[List[str], None] = None,       
+    include_metrics: Union[List[str], None] = None,
+    metric_limits: Union[dict, None] = None,  
+    attribute_paths: Union[List[Path], None] = None,
+    units: str = "metric",
+) -> hv.Points:
+    
+    gdf = run_teehr_query(
+        query_type="metrics",
+        scenario=scenario,
+        location_id=location_id,
+        huc_id=huc_id,
+        value_time_start=value_time_start,
+        value_time_end=value_time_end,
+        reference_time_single=reference_time_single,
+        reference_time_start=reference_time_start,
+        reference_time_end=reference_time_end,
+        value_min=value_min,
+        value_max=value_max,
+        include_metrics=include_metrics,
+        group_by=group_by,
+        order_by=order_by,
+        attribute_paths=attribute_paths
+    )
+
+    
+    # convert units if necessary, add attributes, normalize
+    gdf = gdf.to_crs("EPSG:3857")
+    gdf = convert_query_to_viz_units(gdf, units, scenario['variable'])
+    gdf['sum_diff'] = gdf['secondary_sum']-gdf['primary_sum']
+    include_metrics = include_metrics + ['sum_diff']
+
+    if metric_limits is not None:
+        for metric in gdf.columns:
+            if metric in metric_limits.keys():
+                limits = metric_limits[metric]
+                gdf = gdf[(gdf[metric] >= limits[0]) & (gdf[metric] <= limits[1])]       
+    
+    #convert to spatialpandas object
+    sdf = spd.GeoDataFrame(gdf)
+    
+    #vdim_metrics = list(set(include_metrics + norm_metrics))
+    vdims = include_metrics + [('primary_location_id','id')] 
+    polygons = gv.Polygons(sdf, crs=ccrs.GOOGLE_MERCATOR, vdims=vdims)
+
+    return polygons
+
+
+def build_hyetograph_from_query_selected_point(
+    index: List[int],
+    points_dmap: hv.DynamicMap,
+    scenario: dict,
+    value_time_start: Union[pd.Timestamp, None] = None,
+    value_time_end: Union[pd.Timestamp, None] = None,    
+    reference_time_single: Union[pd.Timestamp, None] = None,
+    reference_time_start: Union[pd.Timestamp, None] = None,
+    reference_time_end: Union[pd.Timestamp, None] = None,
+    value_min: Union[float, None] = None,
+    value_max: Union[float, None] = None, 
+    attribute_paths: Union[List[Path], None] = None,
+    units: str = "metric",
+    opts = {},
+) -> hv.Layout:
+    
+    if len(index) > 0 and len(points_dmap.dimensions('value')) > 0:  
+        point_id = points_dmap.dimension_values('primary_location_id')[index][0]
+        cross = pd.read_parquet(attribute_paths['usgs_huc_crosswalk'])
+        huc12_id = cross.loc[cross['primary_location_id']==point_id, 'secondary_location_id'].iloc[0]
+        huc10_id = "-".join(['huc10', huc12_id.split("-")[1][:10]])
+        title = f"{huc10_id} (Contains Gage: {point_id}) {reference_time_single} {index}"     
+        
+        df = run_teehr_query(
+            query_type="timeseries",
+            scenario=scenario,
+            location_id=huc10_id,
+            value_time_start=value_time_start,
+            value_time_end=value_time_end,
+            reference_time_single=reference_time_single,
+            reference_time_start=reference_time_start,
+            reference_time_end=reference_time_end,
+            value_min=value_min,
+            value_max=value_max,
+            order_by=['primary_location_id','reference_time','value_time'],
+            attribute_paths=attribute_paths,
+            include_geometry=False,
+        )            
+        df = convert_query_to_viz_units(df, units, 'precipitation')
+        
+        df['value_time_str'] = df['value_time'].dt.strftime('%Y-%m-%d-%H')
+        time_start = df['value_time'].min()
+        time_end = df['value_time'].max()
+        t = time_start + (time_end - time_start)*0.01
+        text_x = t.replace(second=0, microsecond=0, minute=0).strftime('%Y-%m-%d-%H')
+
+        if units == 'metric':
+            unit_rate_label = 'mm/hr'
+            unit_cum_label = 'mm'
+            min_yaxis = 25
+        else:
+            unit_rate_label = 'in/hr'
+            unit_cum_label = 'in'
+            min_yaxis = 1
+        
+        if 'value' in df.columns:  #single timeseries
+            df['cumulative'] = df['value'].cumsum()
+
+            data_max = df['value'].max()
+            ymax_bars = max(data_max*1.1,min_yaxis)
+            ymax_curve = max(data_max*1.1,min_yaxis)
+            text_y = ymax_bars*0.9   
+            text_label = hv.Text(text_x, text_y, title).opts(text_align='left', text_font_size='10pt', 
+                            text_color='#57504d', text_font_style='bold')               
+
+            bars = hv.Bars(df, kdims = [('value_time_str','Date')], vdims = [('value', 'Precip Rate ' + unit_rate_label)])
+            curve = hv.Curve(df, kdims = [('value_time_str', 'Date')], vdims = [('cum', 'Precip ' + unit_cum_label)])
+
+            bars.opts(**opts, fill_color = 'blue', line_color = None, ylim=(0, ymax_bars))
+            curve.opts(**opts, color='orange', hooks=[plot_secondary_bars_curve])
+            ts_layout = (bars * curve * text_label).opts(show_title=False)  
+
+        else:
+
+            df['primary_cumulative'] = df['primary_value'].cumsum()
+            df['secondary_cumulative'] = df['secondary_value'].cumsum()
+            data_max = max(df['primary_value'].max(), df['secondary_value'].max())
+            data_max_cum = max(df['primary_cumulative'].max(), df['secondary_cumulative'].max())
+            
+            ###  need to fix ymax so both cumulative 
+            
+            ymax_bars = max(data_max*1.1,min_yaxis)
+            ymax_curve = max(data_max_cum*1.1,min_yaxis) 
+            
+            bars_prim_max = df['primary_value'].max()
+            bars_sec_max = df['secondary_value'].max()
+            curve_prim_max = df['primary_cumulative'].max()
+            curve_sec_max = df['secondary_cumulative'].max()
+            text_y = ymax_bars*0.85   
+            text_label = hv.Text(text_x, text_y, title).opts(text_align='left', text_font_size='10pt', 
+                            text_color='#57504d', text_font_style='bold')  
+            
+            bars_prim = hv.Bars(df, kdims = [('value_time_str','Date')], 
+                                vdims = [('primary_value', 'Precip Rate ' + unit_rate_label)])          
+            curve_prim = hv.Curve(df, kdims = [('value_time_str', 'Date')], 
+                                  vdims = [('primary_cumulative', 'Accum. Precip ' + unit_cum_label)])
+            
+            bars_sec = hv.Bars(df, kdims = [('value_time_str','Date')], 
+                               vdims = [('secondary_value', 'Precip Rate ' + unit_rate_label)])
+            curve_sec = hv.Curve(df, kdims = [('value_time_str', 'Date')], 
+                                 vdims = [('secondary_cumulative', 'Accum. Precip ' + unit_cum_label)])
+            
+            bars_prim.opts(**opts, fill_color = 'dodgerblue', line_color = None, ylim=(0, ymax_bars))
+            bars_sec.opts(**opts, fill_color = 'orange', line_color = None, ylim=(0, ymax_bars))            
+            
+            # comment out secondary plot hook for now, still remaining issues with scale since the hook function resets
+            # the y-axis limits.  Need to rewrite the hook function.
+            curve_prim.opts(**opts, color='dodgerblue', ylim=(0, ymax_curve))#, hooks=[plot_secondary_bars_curve])                
+            curve_sec.opts(**opts, color='orange', ylim=(0, ymax_curve))#, hooks=[plot_secondary_bars_curve])    
+                   
+            ###  code below is necessary as a work around to a scale issue when using hooks to plot on a secondary y-axis
+            # if bars_prim_max > bars_sec_max and curve_prim_max > curve_sec_max:
+            #     #ts_layout = hv.Layout(bars_prim * bars_sec * curve_prim * curve_sec * text_label).opts(show_title=False)
+            #     ts_layout = hv.Layout(bars_prim * bars_sec * text_label + curve_prim * curve_sec).cols(1).opts(show_title=False)
+            # elif bars_prim_max > bars_sec_max and curve_prim_max < curve_sec_max:
+            #     ts_layout = hv.Layout(bars_prim * bars_sec * text_label + curve_sec * curve_prim).cols(1).opts(show_title=False)
+            #     #ts_layout = (bars_prim * bars_sec * curve_sec * curve_prim * text_label).opts(show_title=False)
+            # elif bars_prim_max < bars_sec_max and curve_prim_max < curve_sec_max:
+            #     ts_layout = (bars_sec * bars_prim * curve_sec * curve_prim * text_label).opts(show_title=False)
+            # elif bars_prim_max < bars_sec_max and curve_prim_max > curve_sec_max:
+            #     ts_layout = (bars_sec * bars_prim * curve_prim * curve_sec * text_label).opts(show_title=False)
+            
+            ts_layout = hv.Layout(bars_prim * bars_sec * text_label + curve_prim * curve_sec).cols(1).opts(show_title=False)            
+                
+    else:        
+        df = pd.DataFrame([[0,0],[1,0]], columns = ['Date','value'])
+        curve = hv.Curve(df, "Date", "value").opts(**opts)
+        text_label = hv.Text(0.01, 0.9, "No Selection").opts(text_align='left', text_font_size='10pt', 
+                                                       text_color='#57504d', text_font_style='bold')
+        ts_layout = hv.Layout(curve * text_label + curve * text_label).cols(1).opts(show_title=False)
+            
+    return ts_layout 
+
+
+def build_hydrograph_from_query_selected_point(
+    index: List[int],
+    points_dmap: hv.DynamicMap,
+    scenario: dict,
+    value_time_start: Union[pd.Timestamp, None] = None,
+    value_time_end: Union[pd.Timestamp, None] = None,    
+    reference_time_single: Union[pd.Timestamp, None] = None,
+    reference_time_start: Union[pd.Timestamp, None] = None,
+    reference_time_end: Union[pd.Timestamp, None] = None,
+    value_min: Union[float, None] = None,
+    value_max: Union[float, None] = None, 
+    attribute_paths: Union[List[Path], None] = None,
+    units: str = "metric",
+    opts = {},
+) -> hv.Layout:
+    
+    if len(index) > 0 and len(points_dmap.dimensions('value')) > 0:  
+        point_id = points_dmap.dimension_values('primary_location_id')[index][0]
+        area = points_dmap.dimension_values('upstream_area_value')[index][0]
+        title = f"Gage ID: {point_id} {reference_time_single} {index}"
+        
+        df = run_teehr_query(
+            query_type="timeseries",
+            scenario=scenario,
+            location_id=point_id,
+            value_time_start=value_time_start,
+            value_time_end=value_time_end,
+            reference_time_single=reference_time_single,
+            reference_time_start=reference_time_start,
+            reference_time_end=reference_time_end,
+            value_min=value_min,
+            value_max=value_max,
+            order_by=['primary_location_id','reference_time','value_time'],
+            attribute_paths=attribute_paths,
+            include_geometry=False,
+        )      
+        df = convert_query_to_viz_units(df, units, 'streamflow')      
+        
+        time_start = df['value_time'].min()
+        time_end = df['value_time'].max()
+        t = time_start + (time_end - time_start)*0.02
+        text_x = t.replace(second=0, microsecond=0, minute=0)
+
+        if units == 'metric':
+            unit_label = 'cms'
+            unit_norm_label = 'mm/hr'
+            conversion = 3600*1000/1000**2
+        else:
+            unit_label = 'cfs'
+            unit_norm_label = 'in/hr'
+            conversion = 3600*12/5280**2
+        
+        if 'value' in df.columns:  #single timeseries
+            df['normalized'] = df['value']/area*conversion
+
+            data_max = df['value'].max()
+            data_max_norm = df['normalized'].max()
+            ymax_flow = max(data_max*1.1,100)
+            ymax_norm = max(data_max_norm*1.1,1)
+            text_y = ymax_flow*0.9   
+            text_label = hv.Text(text_x, text_y, title).opts(text_align='left', text_font_size='10pt', 
+                                           text_color='#57504d', text_font_style='bold')  
+
+            flow = hv.Curve(df, kdims = [('value_time', 'Date')], vdims = [('value', 'Flow ' + unit_label)])
+            #norm = hv.Curve(df, kdims = [('value_time', 'Date')], vdims = [('normalized', 'Normalized Flow ' + unit_norm_label)])
+
+            flow.opts(**opts, color='blue', ylim=(0, ymax_flow))
+            #norm.opts(**opts, color='orange', alpha=0, ylim=(0, ymax_norm), hooks=[plot_secondary_bars_curve])
+
+        else:
+
+            df['primary_normalized'] = df['primary_value']/area*conversion
+            df['secondary_normalized'] = df['secondary_value']/area*conversion
+            prim_max = df['primary_value'].max()
+            sec_max = df['secondary_value'].max()
+            data_max = max(prim_max, sec_max)
+            data_max_norm = max(df['primary_normalized'].max(), df['secondary_normalized'].max())
+            
+            ymax_flow = max(data_max*1.1,100)
+            ymax_norm = max(data_max_norm*1.1,1)
+            text_y = ymax_flow*0.9  
+            
+            text_label = hv.Text(text_x, text_y, title).opts(text_align='left', text_font_size='10pt', 
+                                           text_color='#57504d', text_font_style='bold')  
+
+            flow_prim = hv.Curve(df, kdims = [('value_time', 'Date')], 
+                                 vdims = [('primary_value', 'Flow ' + unit_label)])
+            norm_prim = hv.Curve(df, kdims = [('value_time', 'Date')], 
+                                 vdims = [('primary_normalized', 'Normalized Flow ' + unit_norm_label)])
+            
+            flow_sec = hv.Curve(df, kdims = [('value_time', 'Date')], 
+                                vdims = [('secondary_value', 'Flow ' + unit_label)])
+            norm_sec = hv.Curve(df, kdims = [('value_time', 'Date')], 
+                                vdims = [('secondary_normalized', 'Normalized Flow ' + unit_norm_label)])
+
+            flow_prim.opts(**opts, color='dodgerblue', ylim=(0, ymax_flow))
+            norm_prim.opts(**opts, color='blue', alpha=0, ylim=(0, ymax_norm), hooks=[plot_secondary_curve_curve])  
+            
+            flow_sec.opts(**opts, color='orange', ylim=(0, ymax_flow))
+            norm_sec.opts(**opts, color='orange', alpha=0, ylim=(0, ymax_norm), hooks=[plot_secondary_curve_curve]) 
+          
+            if prim_max > sec_max:
+                #ts_layout = (flow_prim * flow_sec * norm_prim * norm_sec * text_label).opts(show_title=False)  
+                ts_layout = (flow_prim * flow_sec * text_label).opts(show_title=False)  
+            else:
+                #ts_layout = (flow_sec * flow_prim * norm_sec * norm_prim * text_label).opts(show_title=False)
+                ts_layout = (flow_sec * flow_prim * text_label).opts(show_title=False)
+
+    else:        
+        df = pd.DataFrame([[0,0],[1,0]], columns = ['Date','value'])
+        label = "Nothing Selected"
+        curve = hv.Curve(df, "Date", "value").opts(**opts)
+        text = hv.Text(0.01, 0.9, "No Selection").opts(text_align='left', text_font_size='10pt', 
+                                                       text_color='#57504d', text_font_style='bold')
+        ts_layout = (curve * text).opts(show_title=False)
+            
+    return ts_layout  
+
+def get_gage_basin_selected_point(
+    index: List[int],
+    points_dmap: hv.DynamicMap,     
+    gage_basins_gdf: dict = {},  
+    opts: dict = {},
+) -> Union[hv.Polygons, None]:
+    
+    if len(index) > 0 and len(points_dmap.dimensions('value')) > 0:  
+        point_id = points_dmap.dimension_values('primary_location_id')[index][0]
+        selected_polygon = gage_basins_gdf.loc[gage_basins_gdf['id']==point_id,:]
+        polygon = gv.Polygons(selected_polygon, crs=ccrs.GOOGLE_MERCATOR)
+        polygon.opts(line_color='k', line_width=2, line_alpha=1, fill_alpha=0)
+        
+    else:
+        point_id = points_dmap.dimension_values('primary_location_id')[0]
+        selected_polygon = gage_basins_gdf.loc[gage_basins_gdf['id']==point_id,:]
+        polygon = gv.Polygons(selected_polygon, crs=ccrs.GOOGLE_MERCATOR)
+        polygon.opts(line_color='k', line_width=2, line_alpha=0, fill_alpha=0)
+        
+    return polygon
+
+def get_all_points(scenario: dict) -> hv.Points:
+
+    df = pd.read_parquet(scenario["geometry_filepath"])
+    gdf = tqu.df_to_gdf(df)
+    gdf['easting'] = gdf.geometry.x
+    gdf['northing'] = gdf.geometry.y
+    
+    return hv.Points(gdf, kdims = ['easting','northing'], vdims = ['id'])
+
+
+def get_points_in_huc(
+    scenario: dict,
+    huc_id: str,
+    attribute_paths: Union[List[Path], None] = None,
+) -> hv.Points:
+
+    path = scenario['geometry_filepath']
+    gdf = gpd.read_parquet(path).to_crs("EPSG:3857")
+#    gdf = tqu.df_to_gdf(df)
+    location_list = get_usgs_locations_within_huc(huc_level=2, huc_id=huc_id, attribute_paths=attribute_paths)
+    gdf=gdf[gdf['id'].isin(location_list)]
+    gdf['easting'] = gdf.geometry.x
+    gdf['northing'] = gdf.geometry.y
+    
+    return hv.Points(gdf, kdims = ['easting','northing'], vdims = ['id'])
